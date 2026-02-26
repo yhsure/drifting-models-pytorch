@@ -41,7 +41,8 @@ def precommit(c: Context) -> None:
 def commit(c: Context, m: str) -> None:
     """Run pre-commit with autofixes and create a commit if checks pass."""
     first = c.run("uv run pre-commit run", warn=True)
-    if first.exited != 0:
+    first_exited = 0 if first is None else first.exited
+    if first_exited != 0:
         c.run("git add -A")
         c.run("uv run pre-commit run")
     c.run("git add -A")

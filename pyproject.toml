@@ -5,7 +5,11 @@ description = "Generative Models via Drifting Models in PyTorch"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "matplotlib>=3.8.0",
+    "numpy>=1.26.0",
+    "rectified-flow-pytorch",
     "torch>=2.2.0",
+    "torchvision>=0.17.0",
 ]
 
 [dependency-groups]
@@ -39,5 +43,3 @@ select = ["E", "F", "I", "UP", "B"]
 addopts = "-ra"
 testpaths = ["tests"]
 
-[tool.ty]
-python-version = "3.11"
