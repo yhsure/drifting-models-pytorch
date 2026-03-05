@@ -1,8 +1,20 @@
 # Generative Modeling via Drifting (PyTorch)
 
-PyTorch implementation of **Drifting Models** for one-step generation, following `paper/paper.pdf` and `paper/main.tex`.
+<div align="center">
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml/badge.svg" alt="lint and typecheck"></a>
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml/badge.svg" alt="tests"></a>
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml/badge.svg" alt="pre-commit"></a>
+<a href="https://arxiv.org/abs/2602.04770v2" target="_blank"><img src="https://img.shields.io/badge/arXiv-Paper-b5212f.svg?logo=arxiv" alt="arXiv paper"></a>
+</div><br>
 
-## Status (to-do)
+> **Generative Modeling via Drifting**<br>
+> Mingyang Deng, He Li, Tianhong Li, Yilun Du, and Kaiming He<br>
+> <a href="https://arxiv.org/abs/2602.04770v2" target="_blank">*https://arxiv.org/abs/2602.04770v2*</a> <br>
+>
+> **Abstract:**
+> Generative modeling can be formulated as learning a mapping whose pushforward distribution matches the data distribution. We propose *Drifting Models*, a paradigm that evolves the pushforward distribution during training and naturally supports one-step inference. We introduce a drifting field that drives this evolution and reaches equilibrium when generated and data distributions match. This yields a practical training objective that lets standard neural optimization learn a non-iterative generator.
+
+PyTorch implementation of **Drifting Models** for one-step generation following `paper/main.tex` (https://arxiv.org/abs/2602.04770v2).
 
 The available codebases on GitHub are still quite simple and lack most of the details from the paper. This repo has a status like this:
 
@@ -20,6 +32,8 @@ The available codebases on GitHub are still quite simple and lack most of the de
 - [x] Basic quality automation (`ruff`, `ty`, `pytest`, `pre-commit`, CI workflow).
 
 ### Future paper details to implement
+
+- [ ] Hyperparameter tuning and more comprehensive evaluation.
 - [ ] Strong custom feature encoders used in paper (ResNet-MAE / ConvNeXt-V2) and related ablations.
 - [ ] CFG training/inference path for drifting models (paper Appendix CFG details).
 - [ ] ImageNet-scale experiments and paper-like reporting metrics/ablation tables.
@@ -31,15 +45,62 @@ uv sync --group dev
 uv run pre-commit install
 ```
 
-## Commands
+## Structure
 
-```bash
-uv run invoke --list
-uv run invoke format
-uv run invoke lint
-uv run invoke typecheck
-uv run invoke test
+```text
+drifting-models-pytorch/
+├── drifting_models_pytorch/          # package source
+│   ├── __init__.py                   # exports
+│   ├── data.py                       # data
+│   ├── drifting_models_pytorch.py    # models + loss
+│   └── utils.py                      # helpers
+├── examples/
+│   ├── train_toy.py                  # toy experiments
+│   ├── train_cifar10.py              # CIFAR-10 training
+│   ├── compare_methods.py            # fair-compute comparison launcher
+│   └── benchmark_cifar_visual.py     # CIFAR visual benchmark orchestrator
+├── results/                          # outputs, figures, metrics, samples
+├── tests/                            # test suite
+├── paper/                            # copied paper assets
+└── .github/workflows/                # CI workflows
 ```
+
+## Figures
+
+### CIFAR-10 (Drifting Feature/Pixel + RF)
+
+![CIFAR comparison](results/cifar_training_comparison_flow_r50_r18_pixel.png)
+
+### Toy comparison (Swissroll + Checkerboard)
+
+![Toy comparison](results/toy_training_comparison_swiss_checker.png)
+
+### Toy final samples (matched architecture)
+
+Swissroll (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
+
+![Swissroll final sample](results/swissroll_final_sample_step_005000.png)
+
+Checkerboard (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
+
+![Checkerboard final sample](results/checkerboard_final_sample_step_005000.png)
+
+## Quality Automation
+
+GitHub Actions workflows:
+
+- `.github/workflows/ci-lint-type.yml`
+- `.github/workflows/ci-tests.yml`
+- `.github/workflows/ci-precommit.yml`
+
+Local commands:
+
+- `uv sync --group dev`
+- `ruff format --check`
+- `ruff check`
+- `ty check`
+- `pytest tests/`
+- `pre-commit run --all-files`
 
 ## Run Experiments
 
@@ -63,7 +124,7 @@ Early-stop controls (optional):
 --min-steps 2000 --early-stop-window 200 --early-stop-mmd 0.0020
 ```
 
-### CIFAR-10 (lucidrains U-Net)
+### CIFAR-10 (with a lucidrains U-Net)
 
 Single run (feature drifting):
 
@@ -105,7 +166,6 @@ Publication comparison figure (existing runs):
 
 - `results/figures/cifar_training_comparison_flow_r50_r18_pixel.png`
 - generated via `results/plot_cifar_existing_comparison.py`
-- styling note: run curves use a plasma colormap for visual consistency
 
 Toy-data comparison figure (swissroll + checkerboard):
 
@@ -117,42 +177,13 @@ uv run results/plot_toy_existing_comparison.py \
   --export-vector
 ```
 
-Toy figure styling note:
+## Citing the authors' work
 
-- plasma-inspired palette is used for swissroll/checkerboard training curves.
-
-## Figures
-
-### CIFAR-10 (Drifting Feature/Pixel + RF)
-
-![CIFAR comparison](results/figures/cifar_training_comparison_flow_r50_r18_pixel.png)
-
-### Toy final samples (matched architecture)
-
-Swissroll (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
-
-![Swissroll final sample](results/publication_toy_fixstyle_v3/swiss_drifting/samples/step_005000.png)
-
-
-## Quality Automation
-
-GitHub Actions workflow: `.github/workflows/ci.yml`
-
-- `uv sync --group dev`
-- `ruff format --check`
-- `ruff check`
-- `ty check`
-- `pytest tests/`
-- `pre-commit run --all-files`
-
-## Structure
-
-- `drifting_models_pytorch/`: package source.
-- `examples/train_toy.py`: toy experiments.
-- `examples/train_cifar10.py`: CIFAR-10 training.
-- `examples/compare_methods.py`: fair-compute comparison launcher.
-- `examples/benchmark_cifar_visual.py`: CIFAR visual benchmark orchestrator.
-- `results/plot_*.py`: scripts for publication-ready comparison figures.
-- `.github/workflows/ci.yml`: push / PR quality gates.
-- `tests/`: test suite.
-- `paper/`: copied paper assets.
+```bibtex
+@inproceedings{deng2026drifting,
+  title={Generative Modeling via Drifting},
+  author={Deng, Mingyang and Li, He and Li, Tianhong and Du, Yilun and He, Kaiming},
+  booktitle={International Conference on Machine Learning},
+  year={2026}
+}
+```
