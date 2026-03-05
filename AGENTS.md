@@ -52,7 +52,10 @@ Normalization factors $Z_p$ and $Z_q$ are approximated via batch kernel similari
     * Toy: `uv run examples/train_toy.py --dataset swissroll --method drifting --tau 0.08`
     * CIFAR-10: `uv run examples/train_cifar10.py --method drifting --unet-dim 64 --unet-dim-mults 1,2,4`
     * Comparison: `uv run examples/compare_methods.py --domain toy --dataset swissroll`
-* **CI Workflow**: `.github/workflows/ci.yml` runs format/lint/type/test/pre-commit on push and pull requests.
+* **CI Workflows**:
+    * `.github/workflows/ci-lint-type.yml`
+    * `.github/workflows/ci-tests.yml`
+    * `.github/workflows/ci-precommit.yml`
 
 ## Code Style & Tooling
 

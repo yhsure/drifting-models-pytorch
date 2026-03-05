@@ -1,4 +1,4 @@
-name: CI
+name: CI Pre-commit
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  quality:
+  precommit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,18 +21,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --group dev
-
-      - name: Ruff format check
-        run: uv run ruff format . --check
-
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Type checks
-        run: uv run ty check
-
-      - name: Unit tests
-        run: uv run pytest tests/
 
       - name: Pre-commit
         run: uv run pre-commit run --all-files
