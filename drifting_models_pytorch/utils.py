@@ -38,8 +38,8 @@ def ensure_dir(path: str | Path) -> Path:
     return output
 
 
-def save_json(data: dict[str, Any], path: str | Path) -> None:
-    """Write a dictionary to json.
+def save_json(data: Any, path: str | Path) -> None:
+    """Write serializable content to json.
 
     Args:
         data: Serializable content.

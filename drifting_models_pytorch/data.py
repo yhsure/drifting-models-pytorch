@@ -23,78 +23,85 @@ def _standardize_points(points: Tensor) -> Tensor:
     return centered / centered.std(dim=0, keepdim=True).clamp_min(1e-6)
 
 
-def sample_checkerboard(batch_size: int, device: torch.device, normalize: bool = True) -> Tensor:
+def sample_checkerboard(
+    batch_size: int,
+    device: torch.device,
+    normalize: bool = False,
+    noise: float = 0,
+) -> Tensor:
     """Sample a canonical 2D checkerboard distribution.
 
-    The support is an alternating 4x4 grid over ``[-2, 2) x [-2, 2)``
-    with unit-width cells. This avoids degenerate strips and matches the
-    usual checkerboard benchmark used in generative modeling.
+    This matches the commonly used checkerboard variant where points are sampled
+    from parity-matched cells and then scaled to roughly ``[-1, 1]``.
 
     Args:
         batch_size: Number of samples.
         device: Target device.
         normalize: Whether to standardize coordinates.
+        noise: Optional isotropic Gaussian noise magnitude.
 
     Returns:
         A tensor of shape [batch_size, 2].
     """
-    cell_indices = torch.tensor(
-        [
-            [0, 0],
-            [0, 2],
-            [1, 1],
-            [1, 3],
-            [2, 0],
-            [2, 2],
-            [3, 1],
-            [3, 3],
-        ],
-        device=device,
-        dtype=torch.long,
-    )
-    picked = cell_indices[torch.randint(0, cell_indices.shape[0], (batch_size,), device=device)]
-    offsets = torch.rand(batch_size, 2, device=device)
-    points = -2.0 + picked.to(dtype=torch.float32) + offsets
+    parity = torch.randint(0, 2, (batch_size,), device=device)
+    i = torch.randint(0, 2, (batch_size,), device=device) * 2 + parity
+    j = torch.randint(0, 2, (batch_size,), device=device) * 2 + parity
+    u = torch.rand(batch_size, device=device)
+    v = torch.rand(batch_size, device=device)
+    points = torch.stack((i.to(torch.float32) + u, j.to(torch.float32) + v), dim=1) - 2.0
+    points = points * 0.5
+    if noise > 0.0:
+        points = points + noise * torch.randn_like(points)
     if normalize:
         return _standardize_points(points)
     return points
 
 
-def sample_swissroll(batch_size: int, device: torch.device, normalize: bool = True) -> Tensor:
+def sample_swissroll(
+    batch_size: int,
+    device: torch.device,
+    normalize: bool = False,
+    noise: float = 0.03,
+) -> Tensor:
     """Sample a canonical 2D swiss-roll style distribution.
 
     Args:
         batch_size: Number of samples.
         device: Target device.
         normalize: Whether to standardize coordinates.
+        noise: Optional isotropic Gaussian noise magnitude.
 
     Returns:
         A tensor of shape [batch_size, 2].
     """
-    t = 1.5 * math.pi * (1.0 + 2.0 * torch.rand(batch_size, device=device))
+    t = 0.5 * math.pi + 4.0 * math.pi * torch.rand(batch_size, device=device)
     x = t * torch.cos(t)
     y = t * torch.sin(t)
     points = torch.stack((x, y), dim=-1)
+    points = points / points.abs().max().clamp_min(1e-8)
+    if noise > 0.0:
+        points = points + noise * torch.randn_like(points)
     if normalize:
         return _standardize_points(points)
     return points
 
 
-def get_toy_batch(dataset: str, batch_size: int, device: torch.device) -> Tensor:
+def get_toy_batch(dataset: str, batch_size: int, device: torch.device, noise: float = 0.0) -> Tensor:
     """Sample a toy dataset batch.
 
     Args:
         dataset: Name of toy dataset, one of {"checkerboard", "swissroll"}.
         batch_size: Number of samples.
         device: Target device.
+        noise: Isotropic Gaussian noise magnitude added to data samples.
 
     Returns:
         A tensor of shape [batch_size, 2].
     """
     if dataset == "checkerboard":
-        return sample_checkerboard(batch_size=batch_size, device=device)
+        return sample_checkerboard(batch_size=batch_size, device=device, noise=noise)
     if dataset == "swissroll":
-        return sample_swissroll(batch_size=batch_size, device=device)
+        return sample_swissroll(batch_size=batch_size, device=device, noise=noise)
     raise ValueError(f"Unsupported toy dataset: {dataset}")
 
 
