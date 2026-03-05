@@ -38,6 +38,18 @@ The available codebases on GitHub are still quite simple and lack most of the de
 - [ ] CFG training/inference path for drifting models (paper Appendix CFG details).
 - [ ] ImageNet-scale experiments and paper-like reporting metrics/ablation tables.
 
+## Opinionated take 
+
+- Overall: Very strong performance, even in an early state! 
+
+- Figuring out how best to train in this paradigm needs more work. Pixel-space gradients easily disappear so a strong feature encoder is needed -- yet the encoder needs to fit the inductive biases of the model, so out-of-the-box SOTA embeddings likely won't work in its current state. 
+
+- I however believe my small pretrained ResNet encoders acted as bottlenecks as drifting training progressed for CIFAR-10. A future, more fair comparison is flows vs drifts where both utilize a larger pretrained model. 
+
+- Choice of similarity function (currently multi-temperature kernels) naturally seems _very_ arbitrary, leaving room for improvement. 
+
+- The CFG algorithm appears un-optimized but I see this as secondary to the model (although good CFG typically drastically improves performance). 
+
 ## Setup
 
 ```bash
@@ -75,15 +87,11 @@ drifting-models-pytorch/
 
 ![Toy comparison](results/toy_training_comparison_swiss_checker.png)
 
-### Toy final samples (matched architecture)
+### Toy samples
 
 Swissroll (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
 
 ![Swissroll final sample](results/swissroll_final_sample_step_005000.png)
-
-Checkerboard (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
-
-![Checkerboard final sample](results/checkerboard_final_sample_step_005000.png)
 
 ## Quality Automation
 
