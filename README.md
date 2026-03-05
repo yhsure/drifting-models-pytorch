@@ -1,9 +1,9 @@
 # Generative Modeling via Drifting (PyTorch)
 
 <div align="center">
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml/badge.svg" alt="lint and typecheck"></a>
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml/badge.svg" alt="tests"></a>
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml/badge.svg" alt="pre-commit"></a>
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml/badge.svg?branch=main" alt="lint and typecheck"></a>
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml/badge.svg?branch=main" alt="tests"></a>
+<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml/badge.svg?branch=main" alt="pre-commit"></a>
 <a href="https://arxiv.org/abs/2602.04770v2" target="_blank"><img src="https://img.shields.io/badge/arXiv-Paper-b5212f.svg?logo=arxiv" alt="arXiv paper"></a>
 </div><br>
 
@@ -67,7 +67,7 @@ drifting-models-pytorch/
 
 ## Figures
 
-### CIFAR-10 (Drifting Feature/Pixel + RF)
+### CIFAR-10 (Drifting Feature/Pixel + rectified flow)
 
 ![CIFAR comparison](results/cifar_training_comparison_flow_r50_r18_pixel.png)
 
