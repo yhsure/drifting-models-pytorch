@@ -1,197 +1,116 @@
-# Generative Modeling via Drifting (PyTorch)
+# Generative Modeling via Drifting - PyTorch Port
 
-<div align="center">
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-lint-type.yml/badge.svg?branch=main" alt="lint and typecheck"></a>
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-tests.yml/badge.svg?branch=main" alt="tests"></a>
-<a href="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml" target="_blank"><img src="https://github.com/yhsure/drifting-models-pytorch/actions/workflows/ci-precommit.yml/badge.svg?branch=main" alt="pre-commit"></a>
-<a href="https://arxiv.org/abs/2602.04770v2" target="_blank"><img src="https://img.shields.io/badge/arXiv-Paper-b5212f.svg?logo=arxiv" alt="arXiv paper"></a>
-</div><br>
+PyTorch port of the JAX release in `lambertae-drifting`, preserving the same file layout:
 
-> **Generative Modeling via Drifting**<br>
-> Mingyang Deng, He Li, Tianhong Li, Yilun Du, and Kaiming He<br>
-> <a href="https://arxiv.org/abs/2602.04770v2" target="_blank">*https://arxiv.org/abs/2602.04770v2*</a> <br>
->
-> **Abstract:**
-> Generative modeling can be formulated as learning a mapping whose pushforward distribution matches the data distribution. We propose *Drifting Models*, a paradigm that evolves the pushforward distribution during training and naturally supports one-step inference. We introduce a drifting field that drives this evolution and reaches equilibrium when generated and data distributions match. This yields a practical training objective that lets standard neural optimization learn a non-iterative generator.
+- `configs/`
+- `dataset/`
+- `models/`
+- `utils/`
+- `main.py`, `train.py`, `train_mae.py`, `inference.py`
 
-PyTorch implementation of **Drifting Models** for one-step generation following `paper/main.tex` (https://arxiv.org/abs/2602.04770v2).
+## Environment (uv + Jupiter)
 
-The available codebases on GitHub are still quite simple and lack most of the details from the paper. This repo has a status like this:
+Use `uv` for dependency and venv management.
 
-### Implemented now
+On Jupiter:
 
-- [x] Core drifting objective with stop-gradient target.
-- [x] Mean-shift attraction/repulsion drifting field from positive/negative samples.
-- [x] Softmax-based kernel normalization and multi-temperature support (e.g., `tau in {0.02, 0.05, 0.2}`).
-- [x] Toy experiments on swissroll and checkerboard with sample snapshots and MMD tracking.
-- [x] Pixel-space training path (CIFAR-10) with feature-space drifting loss.
-- [x] Rectified Flow baseline runs with fixed-compute comparison scripts.
-- [x] Systematic evaluation pipeline (FID/IS and visual benchmark report).
-- [x] Paper-style multi-scale feature extraction for drifting loss (per-scale/per-location descriptors).
-- [x] Full feature and drift normalization from Appendix A (shared scale estimation across locations).
-- [x] Basic quality automation (`ruff`, `ty`, `pytest`, `pre-commit`, CI workflow).
+```bash
+module load Stages/2026
+module load GCCcore/14.3.0 CUDA/13 Python/3.13.5 uv/0.8.17
+```
 
-### Future paper details to implement
+Use the `uv` venv for `torch` / `torchvision` (do not load `PyTorch/*`; CUDA 12, conflicts with this stack).
 
-- [ ] Hyperparameter tuning and more comprehensive evaluation.
-- [ ] Strong custom feature encoders used in paper (ResNet-MAE / ConvNeXt-V2) and related ablations.
-- [ ] CFG training/inference path for drifting models (paper Appendix CFG details).
-- [ ] ImageNet-scale experiments and paper-like reporting metrics/ablation tables.
+Set cache paths to project storage (avoids home/scratch permission and quota issues):
 
-## Opinionated take
+```bash
+export UV_CACHE_DIR=/e/project1/e-dev-2026d02-064/_abj/.uv-cache
+export TORCHINDUCTOR_CACHE_DIR=$PWD/.torch-cache/torchinductor
+export TORCH_HOME=$PWD/.torch-cache/torch
+mkdir -p "$UV_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$TORCH_HOME"
+```
 
-- Overall: Very strong performance, even in an early state!
+CLI `--workdir` is rewritten to a stamped folder: `runs/foo` → `runs/MMDD_HHMM_foo`; default `runs` → `runs/MMDD_HHMM`. Point `--init-from` / resumes at that path.
 
-- Figuring out how best to train in this paradigm needs more work. Pixel-space gradients easily disappear so a strong feature encoder is needed -- yet the encoder needs to fit the inductive biases of the model, so out-of-the-box SOTA embeddings likely won't work in its current state.
+After `uv sync`, prefer `.venv/bin/python …` for repeated local runs; `uv run` re-checks the env each time and can be slow on shared storage.
 
-- I however believe my small pretrained ResNet encoders acted as bottlenecks as drifting training progressed for CIFAR-10. A future, more fair comparison is flows vs drifts where both utilize a larger pretrained model.
-
-- Choice of similarity function (currently multi-temperature kernels) naturally seems _very_ arbitrary, leaving room for improvement.
-
-- The CFG algorithm appears un-optimized but I see this as secondary to the model (although good CFG typically drastically improves performance).
-
-## Setup
+Install and run:
 
 ```bash
 uv sync --group dev
-uv run pre-commit install
+uv run python -V
+uv run python main.py --gen --config configs/gen/latent_ablation.yaml --workdir runs/gen_latent_ablation
 ```
 
-## Structure
+Quick login-node smoke runs on cached latents:
 
-```text
-drifting-models-pytorch/
-├── drifting_models_pytorch/          # package source
-│   ├── __init__.py                   # exports
-│   ├── data.py                       # data
-│   ├── drifting_models_pytorch.py    # models + loss
-│   └── utils.py                      # helpers
-├── examples/
-│   ├── train_toy.py                  # toy experiments
-│   ├── train_cifar10.py              # CIFAR-10 training
-│   ├── compare_methods.py            # fair-compute comparison launcher
-│   └── benchmark_cifar_visual.py     # CIFAR visual benchmark orchestrator
-├── results/                          # outputs, figures, metrics, samples
-├── tests/                            # test suite
-├── paper/                            # copied paper assets
-└── .github/workflows/                # CI workflows
+```bash
+uv run python main.py --config configs/dev/login_smoke_mae.yaml --workdir runs/login_smoke_mae
+uv run python main.py --gen --config configs/dev/login_smoke_gen.yaml --workdir runs/login_smoke_gen
 ```
 
-## Figures
+## Paths
 
-### CIFAR-10 (Drifting Feature/Pixel + rectified flow)
+Runtime paths are configured in `utils/env.py` and can be overridden by environment variables:
 
-![CIFAR comparison](results/cifar_training_comparison_flow_r50_r18_pixel.png)
+- `IMAGENET_PATH`
+- `IMAGENET_CACHE_PATH`
+- `IMAGENET_FID_NPZ`
+- `IMAGENET_PR_NPZ`
+- `HF_ROOT`
+- `HF_REPO_ID`
 
-### Toy comparison (Swissroll + Checkerboard)
+Defaults are set to the shared workspace layout used on Jupiter (`imagenet/`, `imagenet_latent_cache/`, `imagenet_stats/`).
 
-![Toy comparison](results/toy_training_comparison_swiss_checker.png)
+## Build latent cache
 
-### Toy samples
+```bash
+uv run python -m dataset.latent \
+  --data-path "$IMAGENET_PATH" \
+  --target-path "$IMAGENET_CACHE_PATH" \
+  --local-batch-size 128 \
+  --num-workers 8 \
+  --pin-memory
+```
 
-Swissroll (`hidden_dim=384`, `depth=8`, `steps=5000`, multi-tau):
+## Train
 
-![Swissroll final sample](results/swissroll_final_sample_step_005000.png)
+Generator training:
 
-## Quality Automation
+```bash
+uv run python main.py --gen --config configs/gen/latent_sota_B.yaml --workdir runs/gen_latent_sota_B
+```
 
-GitHub Actions workflows:
+MAE training:
 
-- `.github/workflows/ci-lint-type.yml`
-- `.github/workflows/ci-tests.yml`
-- `.github/workflows/ci-precommit.yml`
+```bash
+uv run python main.py --config configs/mae/latent_640.yaml --workdir runs/mae_latent_640
+```
 
-Local commands:
+## FID inference
+
+```bash
+uv run python inference.py \
+  --init-from runs/gen_latent_sota_B \
+  --cfg-scale 1.0 \
+  --num-samples 50000 \
+  --eval-batch-size 512 \
+  --json-out runs/fid/result.json
+```
+
+## CI
+
+Basic GitHub Actions CI is in `.github/workflows/ci.yml`:
 
 - `uv sync --group dev`
-- `ruff format --check`
-- `ruff check`
-- `ty check`
-- `pytest tests/`
-- `pre-commit run --all-files`
+- `pytest -q`
 
-## Run Experiments
+## Slurm
 
-### Toy Data (GPU recommended)
-
-Swissroll:
+Shared setup: `scripts/slurm/common.sh`. Submit from the repository root; see `scripts/slurm/README.md` for allocation flags (`--exclusive`, 288 CPUs per node).
 
 ```bash
-uv run examples/train_toy.py --dataset swissroll --method drifting --taus 0.02,0.05,0.2 --batch-size 1024 --dataset-noise 0.0 --hidden-dim 384 --depth 8 --steps 5000 --save-every 1000 --use-output-bound --output-scale 1.0 --outdir results/publication_toy_fixstyle_v3/swiss_drifting
-```
-
-Checkerboard:
-
-```bash
-uv run examples/train_toy.py --dataset checkerboard --method drifting --taus 0.02,0.05,0.2 --batch-size 1024 --dataset-noise 0.0 --hidden-dim 384 --depth 8 --steps 5000 --save-every 1000 --use-output-bound --output-scale 1.0 --outdir results/publication_toy_fixstyle_v3/checker_drifting
-```
-
-Early-stop controls (optional):
-
-```bash
---min-steps 2000 --early-stop-window 200 --early-stop-mmd 0.0020
-```
-
-### CIFAR-10 (with a lucidrains U-Net)
-
-Single run (feature drifting):
-
-```bash
-uv run examples/train_cifar10.py --method drifting --drifting-mode feature --unet-dim 64 --unet-dim-mults 1,2,4 --outdir results/cifar10/drifting_feature
-```
-
-Single run (pixel drifting):
-
-```bash
-uv run examples/train_cifar10.py --method drifting --drifting-mode pixel --unet-dim 64 --unet-dim-mults 1,2,4 --outdir results/cifar10/drifting_pixel
-```
-
-Single run (rectified flow):
-
-```bash
-uv run examples/train_cifar10.py --method rectified_flow --unet-dim 64 --unet-dim-mults 1,2,4 --outdir results/cifar10/rf
-```
-
-### CIFAR Visual Benchmark (3-way)
-
-Quick smoke run:
-
-```bash
-uv run examples/benchmark_cifar_visual.py --mode quick
-```
-
-Full benchmark run:
-
-```bash
-uv run examples/benchmark_cifar_visual.py --mode full --export-vector
-```
-
-Main output figure:
-
-- `results/figures/cifar_training_comparison.png`
-
-Publication comparison figure (existing runs):
-
-- `results/figures/cifar_training_comparison_flow_r50_r18_pixel.png`
-- generated via `results/plot_cifar_existing_comparison.py`
-
-Toy-data comparison figure (swissroll + checkerboard):
-
-```bash
-uv run results/plot_toy_existing_comparison.py \
-  --swiss-drifting-dir results/publication_toy_fixstyle_v3/swiss_drifting \
-  --checker-drifting-dir results/publication_toy_fixstyle_v3/checker_drifting \
-  --output results/figures/toy_training_comparison_swiss_checker.png \
-  --export-vector
-```
-
-## Citing the authors' work
-
-```bibtex
-@inproceedings{deng2026drifting,
-  title={Generative Modeling via Drifting},
-  author={Deng, Mingyang and Li, He and Li, Tianhong and Du, Yilun and He, Kaiming},
-  booktitle={International Conference on Machine Learning},
-  year={2026}
-}
+sbatch scripts/slurm/mae_login_smoke.sbatch
+sbatch scripts/slurm/gen_login_smoke.sbatch
+sbatch scripts/slurm/gen_2node_smoke.sbatch
 ```

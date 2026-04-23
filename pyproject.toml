@@ -1,26 +1,31 @@
 [project]
 name = "drifting-models-pytorch"
-version = "0.0.1"
-description = "Generative Models via Drifting Models in PyTorch"
+version = "0.1.0"
+description = "PyTorch port of Generative Modeling via Drifting"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "matplotlib>=3.8.0",
-    "numpy>=1.26.0",
-    "rectified-flow-pytorch",
-    "torch>=2.2.0",
-    "torchvision>=0.17.0",
-    "torchmetrics[image]>=1.4.0",
+  "absl-py>=2.1.0",
+  "diffusers>=0.30.0",
+  "einops>=0.8.0",
+  "huggingface-hub>=0.24.0",
+  "numpy>=1.26.0",
+  "Pillow>=10.0.0",
+  "pytorch-fid>=0.3.0",
+  "PyYAML>=6.0.1",
+  "scipy>=1.13.0",
+  "torch>=2.11.0,<2.12",
+  "torchmetrics[image]>=1.4.0",
+  "torchvision>=0.26.0,<0.27",
+  "tqdm>=4.66.0",
+  "transformers>=4.44.0,<5",
+  "wandb>=0.18.0",
 ]
 
 [dependency-groups]
 dev = [
-    "invoke>=2.2.0",
-    "mkdocs>=1.6.0",
-    "pre-commit>=3.7.0",
-    "pytest>=8.0.0",
-    "ruff>=0.14.11",
-    "ty",
+  "pytest>=8.3.0",
+  "ruff>=0.8.0",
 ]
 
 [build-system]
@@ -28,17 +33,18 @@ requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["drifting_models_pytorch"]
+packages = ["dataset", "models", "utils"]
+include = ["*.py", "configs/**/*.yaml"]
 
 [tool.uv]
-package = true
+package = false
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

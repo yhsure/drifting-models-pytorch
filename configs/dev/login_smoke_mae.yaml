@@ -1,0 +1,58 @@
+hsdp_dim: 1
+
+logging:
+  use_wandb: false
+  log_every_k: 1
+
+dataset:
+  resolution: 256
+  use_aug: false
+  use_latent: true
+  use_cache: true
+  num_classes: 1000
+  batch_size: 8
+  eval_batch_size: 8
+  kwargs:
+    num_workers: 0
+    pin_memory: false
+    prefetch_factor: 2
+
+model:
+  base_channels: 64
+  patch_size: 2
+  dropout_prob: 0.0
+  layers: [2, 2, 2, 2]
+  in_channels: 4
+  use_bf16: false
+  input_patch_size: 1
+
+optimizer:
+  lr_schedule:
+    learning_rate: 0.0001
+    warmup_steps: 1
+    lr_schedule: "const"
+    total_steps: 2
+  weight_decay: 0.01
+  adam_b1: 0.9
+  adam_b2: 0.95
+
+train:
+  seed: 42
+  total_steps: 2
+  save_per_step: 100
+  eval_per_step: 1000
+  eval_samples: 16
+  forward_dict:
+    mask_ratio_min: 0.5
+    mask_ratio_max: 0.5
+    lambda_cls: 0.0
+  eval_forward_dict:
+    mask_ratio_min: 0.5
+    mask_ratio_max: 0.5
+    lambda_cls: 0.0
+  ema_decay: 0.999
+  keep_every: 500000
+  keep_last: 1
+  finetune_last_steps: 0
+  warmup_finetune: 10
+  finetune_cls: 0.1
