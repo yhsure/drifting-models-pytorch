@@ -21,16 +21,18 @@ module load GCCcore/14.3.0 CUDA/13 Python/3.13.5 uv/0.8.17
 
 Use the `uv` venv for `torch` / `torchvision` (do not load `PyTorch/*`; CUDA 12, conflicts with this stack).
 
-Set cache paths to project storage (avoids home/scratch permission and quota issues):
+Shared caches for everyone using this Jupiter project live under the **workspace root** (same tree as `imagenet/`). Slurm sets these via `scripts/slurm/common.sh`; for manual runs:
 
 ```bash
-export UV_CACHE_DIR=/e/project1/e-dev-2026d02-064/_abj/.uv-cache
-export TORCHINDUCTOR_CACHE_DIR=$PWD/.torch-cache/torchinductor
-export TORCH_HOME=$PWD/.torch-cache/torch
-mkdir -p "$UV_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$TORCH_HOME"
+WS=/e/project1/e-dev-2026d02-064
+export UV_CACHE_DIR="$WS/.cache/uv"
+export TORCHINDUCTOR_CACHE_DIR="$WS/.cache/torchinductor"
+export TORCH_HOME="$WS/.cache/torch"
+export HF_ROOT="$WS/hf_cache"
+mkdir -p "$UV_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR" "$TORCH_HOME" "$HF_ROOT"
 ```
 
-CLI `--workdir` is rewritten to a stamped folder: `runs/foo` → `runs/MMDD_HHMM_foo`; default `runs` → `runs/MMDD_HHMM`. Point `--init-from` / resumes at that path.
+If unset, `dataset.py` falls back to `$PWD/.torch-cache` only for torch inductor/home, so prefer the exports above for a shared layout.
 
 After `uv sync`, prefer `.venv/bin/python …` for repeated local runs; `uv run` re-checks the env each time and can be slow on shared storage.
 

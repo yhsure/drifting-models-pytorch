@@ -12,11 +12,12 @@ function drift_load_modules() {
 
 function drift_export_env() {
   export PYTHONUNBUFFERED=1
-  export UV_CACHE_DIR="${UV_CACHE_DIR:-${WORKSPACE_ROOT}/_abj/.uv-cache}"
-  export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-${REPO_ROOT}/.torch-cache/torchinductor}"
-  export TORCH_HOME="${TORCH_HOME:-${REPO_ROOT}/.torch-cache/torch}"
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-${WORKSPACE_ROOT}/.cache/uv}"
+  export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-${WORKSPACE_ROOT}/.cache/torchinductor}"
+  export TORCH_HOME="${TORCH_HOME:-${WORKSPACE_ROOT}/.cache/torch}"
+  export HF_ROOT="${HF_ROOT:-${WORKSPACE_ROOT}/hf_cache}"
 
-  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${REPO_ROOT}/logs/slurm"
+  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_ROOT}" "${REPO_ROOT}/logs/slurm"
 }
 
 function drift_setup() {

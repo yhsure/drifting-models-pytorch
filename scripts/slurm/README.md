@@ -1,6 +1,6 @@
 # Slurm Scripts
 
-`common.sh` contains shared setup used by all jobs (module load, `uv` cache, torch cache, and `uv sync`).
+`common.sh` contains shared setup used by all jobs (module load, `uv sync`, and workspace-root caches: `uv`, torch inductor, `TORCH_HOME`, `HF_ROOT`).
 
 Submit from the repository root: Slurm copies the batch script to spool, so the job uses `SLURM_SUBMIT_DIR` as the repo path. Scripts use `--exclusive`, `--cpus-per-task=288`, and no `--gres`.
 

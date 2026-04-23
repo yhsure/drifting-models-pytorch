@@ -12,12 +12,15 @@ import torch
 import torch.distributed as dist
 from PIL import Image
 
-_torch_cache_root = Path.cwd() / ".torch-cache"
-_torch_cache_root.mkdir(parents=True, exist_ok=True)
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(_torch_cache_root / "torchinductor")
-os.environ["TORCH_HOME"] = str(_torch_cache_root / "torch")
-Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
-Path(os.environ["TORCH_HOME"]).mkdir(parents=True, exist_ok=True)
+if not os.environ.get("TORCHINDUCTOR_CACHE_DIR") or not os.environ.get("TORCH_HOME"):
+    _torch_cache_root = Path.cwd() / ".torch-cache"
+    _torch_cache_root.mkdir(parents=True, exist_ok=True)
+    if not os.environ.get("TORCHINDUCTOR_CACHE_DIR"):
+        os.environ["TORCHINDUCTOR_CACHE_DIR"] = str(_torch_cache_root / "torchinductor")
+    if not os.environ.get("TORCH_HOME"):
+        os.environ["TORCH_HOME"] = str(_torch_cache_root / "torch")
+    Path(os.environ["TORCHINDUCTOR_CACHE_DIR"]).mkdir(parents=True, exist_ok=True)
+    Path(os.environ["TORCH_HOME"]).mkdir(parents=True, exist_ok=True)
 
 from torchvision import datasets, transforms
 from tqdm import tqdm
