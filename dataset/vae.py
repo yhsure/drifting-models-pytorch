@@ -54,7 +54,7 @@ def vae_enc_decode():
         return latents.permute(0, 2, 3, 1).detach().cpu()
 
     @torch.inference_mode()
-    def _decode_fn(latents, model=vae):
+    def _decode_fn(latents, model=vae, decode_chunk_size=32):
         if isinstance(latents, np.ndarray):
             latents_t = torch.from_numpy(latents)
         else:
@@ -64,7 +64,8 @@ def vae_enc_decode():
             raise ValueError(f"Expected 4D latents, got {latents_t.shape}")
         if latents_t.shape[1] != 4:
             latents_t = latents_t.permute(0, 3, 1, 2)
-        out = model.decode(latents_t / 0.18215).sample
+        chunks = latents_t.split(decode_chunk_size, dim=0)
+        out = torch.cat([model.decode(chunk / 0.18215).sample for chunk in chunks], dim=0)
         return out.detach().cpu()
 
     result = (partial(_encode_fn), partial(_decode_fn))

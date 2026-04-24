@@ -48,7 +48,7 @@ def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
     if apply_fn is None:
         apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
     model.eval()
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+    with torch.inference_mode():
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
 
