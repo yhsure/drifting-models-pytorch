@@ -23,7 +23,7 @@ def vae_enc_decode(replicate_params: bool = True):
     vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
     vae.eval()
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def _encode_fn(images, rng=None, model=vae):
         del rng
         if isinstance(images, np.ndarray):
@@ -35,7 +35,7 @@ def vae_enc_decode(replicate_params: bool = True):
         latents = dist.sample() * 0.18215
         return latents.permute(0, 2, 3, 1).detach().cpu()
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def _decode_fn(latents, model=vae):
         if isinstance(latents, np.ndarray):
             latents_t = torch.from_numpy(latents)

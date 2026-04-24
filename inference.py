@@ -33,6 +33,7 @@ def _load_model(init_from: str):
     model = model.to(device)
     model.load_state_dict(params, strict=False)
     model.eval()
+    model = torch.compile(model, dynamic=False, fullgraph=True)
 
     latent = _is_latent(metadata)
     postprocess_fn = get_postprocess_fn(use_aug=False, use_latent=False, use_cache=latent)
@@ -48,7 +49,7 @@ def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
     if apply_fn is None:
         apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
 

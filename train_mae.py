@@ -75,7 +75,7 @@ def train_step(
     g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
     state.optimizer.step()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         if state.ema_model is not None:
             for p_ema, p in zip(state.ema_model.parameters(), state.model.parameters()):
                 p_ema.mul_(state.ema_decay).add_(p, alpha=(1.0 - state.ema_decay))
@@ -103,7 +103,7 @@ def eval_step(
     device = next(model.parameters()).device
     batch = preprocess_fn(batch)
     batch = {k: v.to(device) for k, v in batch.items()}
-    with torch.no_grad():
+    with torch.inference_mode():
         loss, metric = model(
             **input_dict(batch),
             **forward_dict,

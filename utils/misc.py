@@ -188,7 +188,7 @@ def profile_func(
     if not actual_run:
         return metrics
 
-    with torch.no_grad():
+    with torch.inference_mode():
         _ = target_fn(*args, **kwargs)
         if torch.cuda.is_available():
             torch.cuda.synchronize()

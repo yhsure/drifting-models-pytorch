@@ -40,7 +40,7 @@ def _compute_features(samples_uint8: np.ndarray, device: torch.device, batch_siz
     model = InceptionV3([block_idx]).to(device).eval()
 
     feats = []
-    with torch.no_grad():
+    with torch.inference_mode():
         for i in range(0, samples_uint8.shape[0], batch_size):
             x = torch.from_numpy(samples_uint8[i : i + batch_size]).to(device=device, dtype=torch.float32) / 255.0
             pred = model(x)[0]
@@ -76,7 +76,7 @@ def _compute_inception_score_from_images(samples_uint8: np.ndarray, device: torc
     if samples_uint8.shape[-1] == 3:
         samples_uint8 = samples_uint8.transpose(0, 3, 1, 2)
     metric = InceptionScore(normalize=False).to(device)
-    with torch.no_grad():
+    with torch.inference_mode():
         for i in range(0, len(samples_uint8), 128):
             x = torch.from_numpy(samples_uint8[i : i + 128]).to(device=device, dtype=torch.uint8)
             metric.update(x)

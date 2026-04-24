@@ -98,7 +98,7 @@ def train_step(
     neg_samples_input = torch.cat([samples, negative_samples], dim=1)
     neg_samples_input = rearrange(neg_samples_input, "b x h w c -> (b x) h w c")
 
-    with torch.no_grad():
+    with torch.inference_mode():
         sg_features_raw = feature_apply(feature_params, neg_samples_input, **activation_kwargs)
     sg_features = {k: rearrange(v, "(b x) ... -> b x ...", b=bsz, x=n_pos + n_uncond) for k, v in sg_features_raw.items()}
 
@@ -110,7 +110,8 @@ def train_step(
 
     input_labels = repeat(labels, "b -> (b g)", g=gen_per_label)
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
-    gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
     gen_features_raw = feature_apply(feature_params, gen_samples, **activation_kwargs)
     gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
@@ -147,7 +148,7 @@ def train_step(
     g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
     state.optimizer.step()
 
-    with torch.no_grad():
+    with torch.inference_mode():
         for p_ema, p in zip(state.ema_model.parameters(), state.model.parameters()):
             p_ema.mul_(state.ema_decay).add_(p, alpha=(1.0 - state.ema_decay))
 
@@ -172,7 +173,7 @@ def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
         apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
     if isinstance(model, torch.nn.Module):
         model.eval()
-    with torch.no_grad():
+    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
 
@@ -265,6 +266,9 @@ def train_gen(
         )
 
     assert feature_params is not None, "feature_params must be provided for feature extraction"
+
+    state.model = torch.compile(state.model, dynamic=False, fullgraph=True)
+    state.ema_model = torch.compile(state.ema_model, dynamic=False, fullgraph=True)
 
     log_for_0("Starting training loop...")
     step = int(state.step)
