@@ -280,9 +280,9 @@ def train_gen(
         device=device,
     )
 
-    log_for_0("Restoring checkpoint from %s", workdir)
+    print(f"Restoring checkpoint from {workdir}")
     state = restore_checkpoint(state=state, workdir=workdir)
-    log_for_0("Checkpoint restored (step=%d)", int(state.step))
+    print(f"Checkpoint restored (step={int(state.step)})")
     if int(state.step) == 0 and init_from:
         log_for_0("Initializing generator params from init_from=%s", init_from)
         state = maybe_init_state_params(
@@ -298,16 +298,16 @@ def train_gen(
     state.ema_model = maybe_compile(state.ema_model, compile_level)
 
     if _world_size() > 1:
-        log_for_0("Wrapping model with DDP (world_size=%d)...", _world_size())
+        print(f"Wrapping model with DDP (world_size={_world_size()})...")
         state.model = DDP(
             state.model,
             device_ids=[local_rank] if device.type == "cuda" else None,
             output_device=local_rank if device.type == "cuda" else None,
             broadcast_buffers=False,
         )
-        log_for_0("DDP ready.")
+        print("DDP ready.")
 
-    log_for_0("Starting training loop...")
+    print("Starting training loop...")
     step = int(state.step)
     initial_step = step
     pbar = tqdm(range(step, total_steps), initial=step, total=total_steps) if is_rank_zero() else range(step, total_steps)
@@ -459,9 +459,9 @@ def main_gen(config, output_dir="runs", profile=False):
 
     set_global_mesh(config.get("hsdp_dim", min(8, max(1, _world_size()))))
 
-    log_for_0("Building model...")
+    print("Building generator model...")
     model_dict = build_model_dict(config, DitGen, workdir=output_dir)
-    log_for_0("Model built.")
+    print("Generator model built.")
     use_aug = bool(config.dataset.get("use_aug", False))
     use_latent = bool(config.dataset.get("use_latent", False))
     use_cache = bool(config.dataset.get("use_cache", False))
@@ -484,7 +484,7 @@ def main_gen(config, output_dir="runs", profile=False):
     if bool(feature_cfg.get("use_mae", True)) and not mae_path:
         raise ValueError("feature.mae_path (or feature.load_dict.hf_model_name / feature.load_dict.path) is required when use_mae=true.")
     compile_level = int(config.get("compile", 2))
-    log_for_0("Loading feature extractor from %s...", mae_path)
+    print(f"Loading feature extractor from {mae_path}...")
     activation_fn, variables = build_activation_function(
         mae_path=mae_path,
         use_convnext=bool(feature_cfg.get("use_convnext", False)),
@@ -493,7 +493,7 @@ def main_gen(config, output_dir="runs", profile=False):
         compile_level=compile_level,
         device=_device(),
     )
-    log_for_0("Feature extractor loaded.")
+    print("Feature extractor loaded.")
     train_gen(
         model=model_dict.model,
         optimizer=model_dict.optimizer,

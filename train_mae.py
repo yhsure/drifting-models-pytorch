@@ -193,9 +193,9 @@ def train_mae(
         device=device,
     )
 
-    log_for_0("Restoring checkpoint from %s", workdir)
+    print(f"Restoring checkpoint from {workdir}")
     state = restore_checkpoint(state=state, workdir=workdir)
-    log_for_0("Checkpoint restored (step=%d)", int(state.step))
+    print(f"Checkpoint restored (step={int(state.step)})")
     if int(state.step) == 0 and init_from:
         log_for_0("Initializing MAE params from init_from=%s", init_from)
         state = maybe_init_state_params(
@@ -220,7 +220,7 @@ def train_mae(
     forward_zeros_dict["mask_ratio_min"] = 0.0
     forward_zeros_dict["mask_ratio_max"] = 0.0
 
-    log_for_0("Starting MAE training loop...")
+    print("Starting MAE training loop...")
     step = int(state.step)
     initial_step = step
     pbar = tqdm(range(step, total_steps), initial=step, total=total_steps) if is_rank_zero() else range(step, total_steps)
@@ -334,9 +334,9 @@ def main_mae(config, output_dir="runs", profile=False):
         config.logging = {}
     config.logging.name = Path(output_dir).resolve().name
 
-    log_for_0("Building model...")
+    print("Building MAE model...")
     model_dict = build_model_dict(config, MAEResNet, workdir=output_dir)
-    log_for_0("Model built.")
+    print("MAE model built.")
     train_mae(
         model=model_dict.model,
         optimizer=model_dict.optimizer,

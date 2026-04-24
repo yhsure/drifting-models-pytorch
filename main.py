@@ -8,6 +8,7 @@ def main():
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config.")
     parser.add_argument("--gen", action="store_true", help="Run generator training loop. Default runs MAE training.")
     parser.add_argument("--workdir", type=str, default="runs", help="Local workdir root for checkpoints/logs.")
+    parser.add_argument("--profile", action="store_true", help="Enable profiling.")
     args = parser.parse_args()
     args.workdir = stamp_workdir(args.workdir)
     args.output_dir = args.workdir
