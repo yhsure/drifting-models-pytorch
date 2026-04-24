@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import gc
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Optional
 
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 from einops import rearrange, repeat
 from tqdm import tqdm
 
@@ -46,8 +48,9 @@ def _world_size() -> int:
 
 
 def _generator_model_config(model) -> dict:
-    if hasattr(model, "model_config"):
-        return dict(model.model_config)
+    unwrapped = model.module if hasattr(model, "module") else model
+    if hasattr(unwrapped, "model_config"):
+        return dict(unwrapped.model_config)
     return {}
 
 
@@ -147,7 +150,8 @@ def train_step(
     state.optimizer.step()
 
     with torch.inference_mode():
-        for p_ema, p in zip(state.ema_model.parameters(), state.model.parameters()):
+        base_model = state.model.module if hasattr(state.model, "module") else state.model
+        for p_ema, p in zip(state.ema_model.parameters(), base_model.parameters()):
             p_ema.mul_(state.ema_decay).add_(p, alpha=(1.0 - state.ema_decay))
 
     metric = {k: float(v) for k, v in total_info.items()}
@@ -225,7 +229,12 @@ def train_gen(
     compile_level: int = 2,
 ):
     torch.manual_seed(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        device = torch.device("cpu")
     model = model.to(device)
     ema_model = copy.deepcopy(model).to(device)
 
@@ -266,6 +275,9 @@ def train_gen(
 
     state.model = maybe_compile(state.model, compile_level)
     state.ema_model = maybe_compile(state.ema_model, compile_level)
+
+    if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+        state.model = DDP(state.model, device_ids=[local_rank], output_device=local_rank)
 
     log_for_0("Starting training loop...")
     step = int(state.step)
