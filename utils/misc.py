@@ -148,6 +148,8 @@ def run_init() -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        torch.cuda.set_device(local_rank % torch.cuda.device_count())
         torch.cuda.manual_seed_all(seed)
 
     ws = int(os.environ.get("WORLD_SIZE", "1"))

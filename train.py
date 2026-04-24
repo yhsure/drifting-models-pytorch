@@ -47,10 +47,27 @@ def _world_size() -> int:
     return 1
 
 
+def _rank() -> int:
+    if dist.is_available() and dist.is_initialized():
+        return dist.get_rank()
+    return 0
+
+
+def _device() -> torch.device:
+    if torch.cuda.is_available():
+        local_rank = int(torch.cuda.current_device())
+        return torch.device(f"cuda:{local_rank}")
+    return torch.device("cpu")
+
+
+def _unwrap_model(model):
+    return model.module if hasattr(model, "module") else model
+
+
 def _generator_model_config(model) -> dict:
-    unwrapped = model.module if hasattr(model, "module") else model
-    if hasattr(unwrapped, "model_config"):
-        return dict(unwrapped.model_config)
+    model = _unwrap_model(model)
+    if hasattr(model, "model_config"):
+        return dict(model.model_config)
     return {}
 
 
@@ -276,8 +293,13 @@ def train_gen(
     state.model = maybe_compile(state.model, compile_level)
     state.ema_model = maybe_compile(state.ema_model, compile_level)
 
-    if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
-        state.model = DDP(state.model, device_ids=[local_rank], output_device=local_rank)
+    if _world_size() > 1:
+        state.model = DDP(
+            state.model,
+            device_ids=[local_rank] if device.type == "cuda" else None,
+            output_device=local_rank if device.type == "cuda" else None,
+            broadcast_buffers=False,
+        )
 
     log_for_0("Starting training loop...")
     step = int(state.step)
@@ -374,41 +396,48 @@ def train_gen(
                 kind="gen",
                 model_config=_generator_model_config(model),
             )
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
 
         do_step_one_eval = bool(eval_on_step_one) and now_step == 1
         do_eval = bool(run_eval) and ((now_step % eval_per_step == 0) or do_step_one_eval or (now_step == total_steps))
         if do_eval:
-            is_sanity = do_step_one_eval
-            n_samples = 500 if is_sanity else eval_samples
-            folder_prefix = "sanity" if is_sanity else "CFG"
-            round_best_fid = float("inf")
-            round_best_cfg = cfg_list[0]
-            eval_cfg_list = cfg_list if not is_sanity else [cfg_list[0]]
+            if _rank() == 0:
+                is_sanity = do_step_one_eval
+                n_samples = 500 if is_sanity else eval_samples
+                folder_prefix = "sanity" if is_sanity else "CFG"
+                round_best_fid = float("inf")
+                round_best_cfg = cfg_list[0]
+                eval_cfg_list = cfg_list if not is_sanity else [cfg_list[0]]
 
-            for eval_cfg in eval_cfg_list:
-                result = evaluate_fid(
-                    dataset_name=dataset_name,
-                    gen_func=generate_step,
-                    gen_params={
-                        "params": state.ema_model,
-                        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],  # noqa: E731
-                        "cfg_scale": eval_cfg,
-                        "postprocess_fn": postprocess_fn,
-                    },
-                    eval_loader=eval_loader,
-                    logger=logger,
-                    num_samples=n_samples,
-                    log_folder=f"{folder_prefix}{eval_cfg}",
-                    log_prefix=f"EMA_{state.ema_decay:g}",
-                )
-                fid_val = result.get("fid", float("inf"))
-                if fid_val < round_best_fid:
-                    round_best_fid = fid_val
-                    round_best_cfg = eval_cfg
+                for eval_cfg in eval_cfg_list:
+                    result = evaluate_fid(
+                        dataset_name=dataset_name,
+                        gen_func=generate_step,
+                        gen_params={
+                            "params": state.ema_model,
+                            "rng": 0,
+                            "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"],  # noqa: E731
+                            "cfg_scale": eval_cfg,
+                            "postprocess_fn": postprocess_fn,
+                        },
+                        eval_loader=eval_loader,
+                        logger=logger,
+                        num_samples=n_samples,
+                        log_folder=f"{folder_prefix}{eval_cfg}",
+                        log_prefix=f"EMA_{state.ema_decay:g}",
+                        rng_eval=0,
+                    )
+                    fid_val = result.get("fid", float("inf"))
+                    if fid_val < round_best_fid:
+                        round_best_fid = fid_val
+                        round_best_cfg = eval_cfg
 
-            if not is_sanity:
-                log_for_0("best_fid=%.4f best_cfg=%.1f (step=%d)", round_best_fid, round_best_cfg, now_step)
-                logger.log_dict({"best_fid": round_best_fid, "best_cfg": round_best_cfg})
+                if not is_sanity:
+                    log_for_0("best_fid=%.4f best_cfg=%.1f (step=%d)", round_best_fid, round_best_cfg, now_step)
+                    logger.log_dict({"best_fid": round_best_fid, "best_cfg": round_best_cfg})
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
 
     logger.finish()
     del model, optimizer, eval_loader, train_loader, state

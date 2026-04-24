@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -13,13 +15,31 @@ _vae_cache = {}
 def _get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
+def _resolve_prefetched_vae() -> tuple[str, bool]:
+    explicit = os.environ.get("SDVAE_PATH") or os.environ.get("DRIFT_SDVAE_PATH")
+    if explicit:
+        return explicit, True
+
+    hf_home_value = os.environ.get("HF_HOME") or os.environ.get("HF_ROOT")
+    if hf_home_value:
+        hub_root = Path(hf_home_value).expanduser() / "hub" / "models--stabilityai--sd-vae-ft-mse" / "snapshots"
+        if hub_root.is_dir():
+            snapshots = sorted(p for p in hub_root.iterdir() if (p / "config.json").exists())
+            if snapshots:
+                return str(snapshots[-1]), True
+
+    return "stabilityai/sd-vae-ft-mse", False
+
+
 def vae_enc_decode():
     cache_key = ("vae_enc_decode",)
     if cache_key in _vae_cache:
         return _vae_cache[cache_key]
 
     device = _get_device()
-    vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse").to(device)
+    vae_path, local_only = _resolve_prefetched_vae()
+    vae = AutoencoderKL.from_pretrained(vae_path, local_files_only=local_only).to(device)
     vae.eval()
 
     @torch.inference_mode()

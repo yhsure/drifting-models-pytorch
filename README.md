@@ -83,6 +83,8 @@ Generator training:
 uv run python main.py --gen --config configs/gen/latent_sota_B.yaml --workdir runs/gen_latent_sota_B
 ```
 
+A short MAE-640 ablation-scale generator run is available at `scripts/slurm/gen_latent_ablation_mae640_short.sbatch` and reached FID 120.99 on 1,024 samples after 800 steps.
+
 MAE training:
 
 ```bash
