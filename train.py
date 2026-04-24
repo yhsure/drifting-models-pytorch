@@ -491,6 +491,7 @@ def main_gen(config, output_dir="runs", profile=False):
         use_mae=bool(feature_cfg.get("use_mae", True)),
         postprocess_fn=postprocess_fn_noclip,
         compile_level=compile_level,
+        device=_device(),
     )
     log_for_0("Feature extractor loaded.")
     train_gen(

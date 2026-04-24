@@ -378,12 +378,15 @@ MAEResNetJAX = MAEResNet
 def build_feature_model_and_params(
     path: str = "",
     use_convnext: bool = False,
+    device: torch.device | None = None,
 ):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if use_convnext:
         from models.convnext import load_convnext_torch_model
 
         model, _ = load_convnext_torch_model(model_name="base")
+        model = model.to(device)
         model.eval()
         return model, {"model": model}
 
@@ -407,10 +410,13 @@ def build_activation_function(
     use_mae=True,
     postprocess_fn=lambda x: x,
     compile_level: int = 2,
+    device: torch.device | None = None,
 ):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     variables = {}
     if use_mae:
-        feature_model, feature_params = build_feature_model_and_params(path=mae_path)
+        feature_model, feature_params = build_feature_model_and_params(path=mae_path, device=device)
         feature_model.get_activations = maybe_compile(feature_model.get_activations, compile_level)
         variables["mae_model"] = feature_model
         variables["mae_params"] = feature_params
@@ -418,6 +424,7 @@ def build_activation_function(
     if use_convnext:
         convnext_model, convnext_feature_params = build_feature_model_and_params(
             use_convnext=True,
+            device=device,
         )
         convnext_model.get_activations = maybe_compile(convnext_model.get_activations, compile_level)
         variables["convnext_model"] = convnext_model
