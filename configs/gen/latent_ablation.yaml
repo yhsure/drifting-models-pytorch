@@ -39,7 +39,6 @@ model:
   noise_classes: 64
   noise_coords: 32
   use_bf16: true
-  attn_fp32: true
 
 
 optimizer:

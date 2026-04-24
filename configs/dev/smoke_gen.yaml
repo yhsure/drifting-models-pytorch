@@ -35,7 +35,6 @@ model:
   noise_classes: 16
   noise_coords: 8
   use_bf16: false
-  attn_fp32: true
 
 optimizer:
   lr_schedule:
