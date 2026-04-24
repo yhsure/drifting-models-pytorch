@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=288
 #SBATCH --exclusive
 #SBATCH --time=00:30:00
-#SBATCH --output=logs/slurm/%x-%j.out
-#SBATCH --error=logs/slurm/%x-%j.err
+#SBATCH --output=logs/slurm/%x-%j.log
+#SBATCH --error=logs/slurm/%x-%j.log
 
 if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
   cd "${SLURM_SUBMIT_DIR}" || exit 1
@@ -29,4 +29,4 @@ exec srun "${REPO_ROOT}/.venv/bin/torchrun" \
   --rdzv-id="${SLURM_JOB_ID}" \
   --rdzv-backend=c10d \
   --rdzv-endpoint="${MASTER_ADDR}:${MASTER_PORT}" \
-  main.py --gen --config configs/dev/login_smoke_gen.yaml --workdir runs/slurm_2node_gen_smoke
+  main.py --gen --config configs/dev/smoke_gen.yaml --workdir runs/slurm_2node_gen_smoke

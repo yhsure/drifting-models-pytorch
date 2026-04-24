@@ -12,12 +12,20 @@ function drift_load_modules() {
 
 function drift_export_env() {
   export PYTHONUNBUFFERED=1
-  export UV_CACHE_DIR="${UV_CACHE_DIR:-${WORKSPACE_ROOT}/.cache/uv}"
-  export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-${WORKSPACE_ROOT}/.cache/torchinductor}"
-  export TORCH_HOME="${TORCH_HOME:-${WORKSPACE_ROOT}/.cache/torch}"
-  export HF_ROOT="${HF_ROOT:-${WORKSPACE_ROOT}/hf_cache}"
 
-  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_ROOT}" "${REPO_ROOT}/logs/slurm"
+  local cache_root="${DRIFT_CACHE_ROOT:-${WORKSPACE_ROOT}/.cache}"
+  local hf_home="${DRIFT_HF_HOME:-${WORKSPACE_ROOT}/hf_cache}"
+
+  export UV_CACHE_DIR="${cache_root}/uv"
+  export TORCHINDUCTOR_CACHE_DIR="${cache_root}/torchinductor"
+  export TORCH_HOME="${cache_root}/torch"
+  export HF_HOME="${hf_home}"
+  export HF_ROOT="${HF_HOME}"
+  export HF_HUB_CACHE="${HF_HOME}/hub"
+  # Keep transformers on HF_HOME/HF_HUB_CACHE path
+  unset TRANSFORMERS_CACHE
+
+  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_HOME}" "${HF_HUB_CACHE}" "${REPO_ROOT}/logs/slurm"
 }
 
 function drift_setup() {

@@ -47,8 +47,8 @@ uv run python main.py --gen --config configs/gen/latent_ablation.yaml --workdir 
 Quick login-node smoke runs on cached latents:
 
 ```bash
-uv run python main.py --config configs/dev/login_smoke_mae.yaml --workdir runs/login_smoke_mae
-uv run python main.py --gen --config configs/dev/login_smoke_gen.yaml --workdir runs/login_smoke_gen
+uv run python main.py --config configs/dev/smoke_mae.yaml --workdir runs/smoke_mae
+uv run python main.py --gen --config configs/dev/smoke_gen.yaml --workdir runs/smoke_gen
 ```
 
 ## Paths
@@ -112,7 +112,8 @@ Basic GitHub Actions CI is in `.github/workflows/ci.yml`:
 Shared setup: `scripts/slurm/common.sh`. Submit from the repository root; see `scripts/slurm/README.md` for allocation flags (`--exclusive`, 288 CPUs per node).
 
 ```bash
-sbatch scripts/slurm/mae_login_smoke.sbatch
-sbatch scripts/slurm/gen_login_smoke.sbatch
+sbatch scripts/slurm/mae_1node_smoke.sbatch
+sbatch scripts/slurm/gen_1node_smoke.sbatch
+sbatch scripts/slurm/mae_2node_smoke.sbatch
 sbatch scripts/slurm/gen_2node_smoke.sbatch
 ```

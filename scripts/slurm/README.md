@@ -9,8 +9,8 @@ Training runs under `torchrun` (`--standalone` on one node; multi-node uses c10d
 Examples:
 
 ```bash
-sbatch scripts/slurm/mae_login_smoke.sbatch
-sbatch scripts/slurm/gen_login_smoke.sbatch
+sbatch scripts/slurm/mae_1node_smoke.sbatch
+sbatch scripts/slurm/gen_1node_smoke.sbatch
 sbatch scripts/slurm/mae_2node_smoke.sbatch
 sbatch scripts/slurm/gen_2node_smoke.sbatch
 ```
