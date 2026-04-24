@@ -110,7 +110,7 @@ def train_step(
 
     input_labels = repeat(labels, "b -> (b g)", g=gen_per_label)
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
-    gen_samples = state.model(c=input_labels, cfg_scale=input_cfg, train=True)["samples"]
+    gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
     gen_features_raw = feature_apply(feature_params, gen_samples, **activation_kwargs)
     gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
@@ -169,7 +169,7 @@ def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
     device = next(model.parameters()).device if isinstance(model, torch.nn.Module) else torch.device("cpu")
     labels = labels.to(device=device, dtype=torch.long)
     if apply_fn is None:
-        apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"]  # noqa: E731
+        apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
     if isinstance(model, torch.nn.Module):
         model.eval()
     with torch.no_grad():
@@ -381,7 +381,7 @@ def train_gen(
                     gen_params={
                         "params": state.ema_model,
                         "rng": 0,
-                        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"],  # noqa: E731
+                        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],  # noqa: E731
                         "cfg_scale": eval_cfg,
                         "postprocess_fn": postprocess_fn,
                     },

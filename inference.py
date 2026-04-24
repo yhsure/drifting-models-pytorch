@@ -46,7 +46,8 @@ def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
     device = next(model.parameters()).device
     labels = labels.to(device=device, dtype=torch.long)
     if apply_fn is None:
-        apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"]  # noqa: E731
+        apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
+    model.eval()
     with torch.no_grad():
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
@@ -136,7 +137,7 @@ def run_inference_from_args(args: argparse.Namespace) -> dict:
     model, postprocess_fn, metadata, device = _load_model(args.init_from)
     _ = device
     gen_step_jit = {
-        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"],
+        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],
         "postprocess_fn": postprocess_fn,
     }
     result = run_eval_fid(
