@@ -1,0 +1,1960 @@
+%%%%%%%% LATEX SUBMISSION FILE %%%%%%%%%%%%%%%%%
+% Original author: Mingyang Deng
+% This file has been changed to incorporate .tex files directly into the paper.tex file.
+% The long appendix with many uncurated image generations has been cut short. 
+%%%%%%%%
+
+\documentclass{article}
+\usepackage{subcaption}
+\usepackage{graphicx}
+% Recommended, but optional, packages for figures and better typesetting:
+\usepackage{microtype}
+% \usepackage{subfig} % REMOVED to avoid conflict with subcaption
+
+\usepackage{booktabs} % for professional tables
+
+% Keep floats (especially table*) from drifting to the end of the document.
+\usepackage{placeins}
+
+% hyperref makes hyperlinks in the resulting PDF.
+% If your build breaks (sometimes temporarily if a hyperlink spans a page)
+% please comment out the following usepackage line and replace
+% \usepackage{icml2026} with \usepackage[nohyperref]{icml2026} above.
+\usepackage{hyperref}
+
+\usepackage[british, english, american]{babel}
+
+% Attempt to make hyperref and algorithmic work together better:
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathcal{P}}
+\newcommand{\argmin}{\textbf{argmin}}
+
+\usepackage[accepted]{template_ICML_2026/icml2026}
+
+% For theorems and such
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{amsthm}
+\usepackage{wrapfig}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{tabulary}
+\usepackage{etoolbox}
+\usepackage{multirow}
+\usepackage{enumitem}
+
+\newcommand{\tablestyle}[2]{\setlength{\tabcolsep}{#1}\renewcommand{\arraystretch}{#2}\centering
+\small
+}
+\newcolumntype{x}[1]{>{\centering\arraybackslash}p{#1pt}}
+\newcolumntype{y}[1]{>{\raggedright\arraybackslash}p{#1pt}}
+\newcolumntype{z}[1]{>{\raggedleft\arraybackslash}p{#1pt}}
+\newcommand{\baseline}[1]{#1}
+
+\newcommand\tablefontsize{%
+  \fontsize{8pt}{9pt}\selectfont
+}
+
+\newcommand{\vv}[1]{\mathbf{#1}}
+\newcommand{\x}{\vv{x}}
+\newcommand{\y}{\vv{y}}
+\newcommand{\V}{\vv{V}}
+\newcommand{\yp}{{\textcolor{blue}{\vv{y}^{+}}}}
+\newcommand{\yn}{{\textcolor{orange}{\vv{y}^{-}}}}
+\newcommand{\Vp}[1]{{\textcolor{blue}{\vv{V}^{+}_{\textcolor{black}{#1}}}}}
+\newcommand{\Vn}[1]{{\textcolor{orange}{\vv{V}^{-}_{\textcolor{black}{#1}}}}}
+
+
+
+\newcommand{\e}{{\boldsymbol{\epsilon}}}
+\newcommand{\otheta}{{\hat{\theta}}}
+
+\renewcommand{\paragraph}[1]{\vspace{.05em}\noindent\textbf{#1}}
+
+% Add a period to the end of an abbreviation unless there's one
+% already, then \xspace.
+\makeatletter
+\def\onedot{.}
+
+\def\eg{\emph{e.g}\onedot} \def\Eg{\emph{E.g}\onedot}
+\def\ie{\emph{i.e}\onedot} \def\Ie{\emph{I.e}\onedot}
+\def\cf{\emph{cf}\onedot} \def\Cf{\emph{Cf}\onedot}
+\def\etc{\emph{etc}\onedot} \def\vs{\emph{vs}\onedot}
+\def\wrt{w.r.t\onedot} \def\dof{d.o.f\onedot}
+\def\iid{i.i.d\onedot} \def\wolog{w.l.o.g\onedot}
+\def\etal{\emph{et al}\onedot}
+\makeatother
+
+
+\definecolor{codeblue}{rgb}{0.25,0.5,0.5}
+\definecolor{codekw}{rgb}{0.85, 0.18, 0.50}
+\definecolor{codesign}{RGB}{0, 0, 255}
+\definecolor{codefunc}{rgb}{0.85, 0.18, 0.50}
+
+\lstdefinelanguage{PythonFuncColor}{
+  language=Python,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{codeblue},
+  stringstyle=\color{orange},
+  showstringspaces=false,
+  basicstyle=\ttfamily\small,
+  literate=
+    {model}{{\color{codefunc}model}}{1}
+    {compute_V}{{\color{codefunc}compute\_V}}{1}
+    {randn}{{\color{codefunc}randn}}{1}
+    {stopgrad}{{\color{codefunc}stopgrad}}{1}
+    {mean}{{\color{codefunc}mean}}{1}
+    {cat}{{\color{codefunc}cat}}{1}
+    {eye}{{\color{codefunc}eye}}{1}
+    {affinity}{{\color{codefunc}affinity}}{1}
+    {softmax}{{\color{codefunc}softmax}}{1}
+    {mse_loss}{{\color{codefunc}mse\_loss}}{1}
+    {sqrt}{{\color{codefunc}sqrt}}{1}
+    {split}{{\color{codefunc}split}}{1}
+    {sum}{{\color{codefunc}sum}}{1}
+    {concat}{{concat} }{1}
+}
+
+\lstset{
+  language=PythonFuncColor,
+  backgroundcolor=\color{white},
+  basicstyle=\fontsize{9pt}{9.9pt}\ttfamily\selectfont,
+  columns=fullflexible,
+  breaklines=true,
+  captionpos=b,
+}
+
+% if you use cleveref..
+\usepackage[capitalize,noabbrev]{cleveref}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% THEOREMS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Todonotes is useful during development; simply uncomment the next line
+%    and comment out the line below the next line to turn off comments
+\usepackage[disable,textsize=tiny]{todonotes}
+% \usepackage[textsize=tiny]{todonotes}
+\newcommand{\yilun}[1]{\textcolor{red}{Yilun: #1}}
+\newcommand{\km}[1]{\textcolor{orange}{[km: #1]}}
+\newcommand{\kmr}[1]{\textcolor{red}{[km: #1]}}
+
+\newcommand{\md}[1]{\textcolor{blue}{Mingyang: #1}}
+\newcommand{\heli}[1]{\textcolor{purple}{He Li: #1}}
+
+
+% The \icmltitle you define below is probably too long as a header.
+% Therefore, a short form for the running title is supplied here:
+\icmltitlerunning{Generative Modeling via Drifting}
+
+\begin{document}
+
+\twocolumn[
+\icmltitle{Generative Modeling via Drifting}
+
+% It is OKAY to include author information, even for blind
+% submissions: the style file will automatically remove it for you
+% unless you've provided the [accepted] option to the icml2026
+% package.
+
+% List of affiliations: The first argument should be a (short)
+% identifier you will use later to specify author affiliations
+% Academic affiliations should list Department, University, City, Region, Country
+% Industry affiliations should list Company, City, Region, Country
+
+% You can specify symbols, otherwise they are numbered in order.
+% Ideally, you should not use this facility. Affiliations will be numbered
+% in order of appearance and this is the preferred way.
+\begin{icmlauthorlist}
+\icmlauthor{Mingyang Deng}{mit}
+\icmlauthor{He Li}{mit}
+\icmlauthor{Tianhong Li}{mit}
+\icmlauthor{Yilun Du}{harvard}
+\icmlauthor{Kaiming He}{mit}
+\end{icmlauthorlist}
+
+\icmlaffiliation{mit}{MIT}
+\icmlaffiliation{harvard}{Harvard University}
+
+% You may provide any keywords that you
+% find helpful for describing your paper; these are used to populate
+% the "keywords" metadata in the PDF but will not be shown in the document
+\icmlkeywords{Machine Learning, Generative Models}
+
+
+\begin{center}
+  % NOTE: Avoid \includegraphics[...]{...} inside \twocolumn[ ... ] because nested
+  % square brackets can confuse TeX's optional-argument parsing.
+  \resizebox{0.9\textwidth}{!}{\includegraphics[width=1.0\linewidth]{figures/teaser_main.png}
+  }
+  \vspace{-1em}
+  \captionof{figure}{\textbf{Drifting Model.}
+  A network $f$ performs a pushforward operation: $q={f}_\# p_{\text{prior}}$, mapping a prior distribution $p_{\text{prior}}$ (\eg, Gaussian, not shown here) to a pushforward distribution $q$ ({\color{orange}orange}).
+  The goal of training is to approximate the data distribution $p_{\text{data}}$ ({\color{blue}blue}).
+  As training iterates, we obtain a sequence of models $\{f_i\}$, which corresponds to a sequence of pushforward distributions $\{q_i\}$.
+  Our Drifting Model focuses on the evolution of this pushforward distribution at \textit{training-time}. We introduce a drifting field (detailed in main text) that approaches zero when $q$ matches $p_{\text{data}}$. This drifting field provides a loss function (y-axis, in log-scale) for training.
+  }
+  \label{fig:teaser}
+  \vspace{.5em}
+\end{center}
+]
+
+% this must go after the closing bracket ] following \twocolumn[ ...
+
+% This command actually creates the footnote in the first column listing the
+% affiliations and the copyright notice. The command takes one argument, which
+% is text to display at the start of the footnote. The \icmlEqualContribution
+% command is standard text for equal contribution. Remove it (just {}) if you
+% do not need this facility.
+
+% Use ONE of the following lines. DO NOT remove the command.
+% If you have no special notice, KEEP empty braces:
+\printAffiliationsAndNotice{}  % no special notice (required even if empty)
+% Or, if applicable, use the standard equal contribution text:
+% \printAffiliationsAndNotice{\icmlEqualContribution}
+
+
+\begin{abstract}
+Generative modeling can be formulated as learning a mapping $f$ such that its pushforward distribution matches the data distribution.
+The pushforward behavior can be carried out iteratively at inference time, \eg, in diffusion/flow-based models.
+In this paper, we propose a new paradigm called \textit{Drifting Models}, which evolve the pushforward distribution during training and naturally admit one-step inference.
+We introduce a drifting field that governs the sample movement and achieves equilibrium when the distributions match.
+This leads to a training objective that allows the neural network optimizer to evolve the distribution.
+In experiments, our one-step generator achieves state-of-the-art results on ImageNet 256$\times$256, with FID 1.54 in latent space and 1.61 in pixel space.
+We hope that our work opens up new opportunities for high-quality one-step generation.
+\vspace{-1.5em}
+\end{abstract}
+
+\section{Introduction}
+
+Generative models are commonly regarded as more challenging than discriminative models.
+While discriminative modeling typically focuses on mapping individual samples to their corresponding labels, generative modeling concerns mapping from one distribution to another.
+This can be expressed as learning a mapping $f$ such that the \mbox{\textit{pushforward}} of a prior distribution $p_\text{prior}$ matches the data distribution, namely, $f_\# p_\text{prior} \approx p_{\text{data}}$.
+Conceptually, generative modeling learns a \textit{functional} (here, $f_\#$) that maps from one function (here, a distribution) to another.
+
+The ``pushforward'' behavior can be realized \textit{iteratively} at \textit{inference} time, \eg, in prevailing paradigms such as Diffusion~\cite{sohl2015deep} and Flow Matching~\cite{lipman2022flow}. When generating, these models map noisier samples to slightly cleaner ones, progressively evolving the sample distribution toward the data distribution.
+This modeling philosophy can be viewed as decomposing a complex pushforward map (\ie, $f_\#$) into a chain of more feasible transformations, applied at inference time.
+
+In this paper, we propose \emph{Drifting Models}, a new paradigm for generative
+modeling. Drifting Models are characterized by learning a pushforward map that evolves during \textit{training} time, thereby removing the need for an iterative inference procedure. The mapping $f$ is represented by a single-pass, non-iterative network. As the training process is inherently iterative in deep learning optimization, it can be naturally viewed as evolving the pushforward
+distribution, $f_\# p_\text{prior}$, through the update of $f$. See Fig.~\ref{fig:teaser}.
+
+To drive the evolution of the training-time pushforward, we introduce a
+\emph{drifting field} that governs the sample movement.
+This field depends on the generated distribution and the data distribution.
+By definition, this field becomes zero when the two distributions match, thereby reaching an equilibrium in which the samples no longer drift.
+
+Building on this formulation, we propose a simple training objective that minimizes the \textit{drift} of the generated samples. This objective induces sample movements and thereby evolves the underlying pushforward distribution through iterative optimization (\eg, SGD). We further introduce the designs of the drifting field, the neural network model, and the training algorithm.
+
+Drifting Models naturally perform \textit{single-step} (\mbox{``1-NFE''}) generation and achieve strong empirical performance.
+On ImageNet 256$\times$256, we obtain a 1-NFE
+FID of \textbf{1.54} under the standard latent-space generation protocol, achieving a new state-of-the-art among single-step methods. This result remains competitive even when compared with \textit{multi-step} diffusion-/flow-based models.
+Further, under the more challenging \textit{pixel}-space generation protocol (\ie, without latents), we reach a 1-NFE FID of \textbf{1.61}, substantially outperforming previous pixel-space methods.
+These results suggest that Drifting Models offer a promising new paradigm for high-quality, efficient generative modeling.
+
+\section{Related Work}
+
+\paragraph{Diffusion-/Flow-based Models.}
+Diffusion models (\eg, \citealt{sohl2015deep,ho2020denoising,song2020score}) and their flow-based counterparts (\eg, \citealt{lipman2022flow,liu2022flow,albergo2023stochastic}) formulate noise-to-data mappings through \textit{differential equations} (SDEs or ODEs). At the core of their inference-time computation is an \textit{\mbox{iterative}} update, \eg, of the form $\x_{i+1}=\x_{i} + \Delta\x_{i}$, such as with an Euler solver. The update $\Delta\x_{i}$ depends on the neural network $f$, and as a result, generation involves multiple steps of network evaluations.
+
+A growing body of work has focused on reducing the steps of diffusion-/flow-based models.
+Distillation-based methods
+(\eg, \citealt{salimans2022progressive,luo2023diff,yin2024one,zhou2024score}) distill a pretrained multi-step model into a single-step one.
+Another line of research  aims to train one-step diffusion/flow models from scratch (\eg, \citealt{song2023consistency,frans2024one,boffi2025flow,geng2025mean}). To achieve this goal, these methods incorporate the SDE/ODE dynamics into training by approximating the induced trajectories.
+In contrast, our work presents a conceptually different paradigm and does not rely on SDE/ODE formulations as in diffusion/flow models.
+
+\paragraph{Generative Adversarial Networks (GANs).}
+GANs \cite{goodfellow2014generative} are a classical family of models that train a generator by discriminating generated samples from real data.
+Like GANs, our method involves a single-pass network $f$ that maps noise to data, whose ``goodness'' is evaluated by a loss function; however, unlike GANs, our method does not rely on adversarial optimization.
+
+\paragraph{Variational Autoencoders (VAEs).}
+VAEs~\cite{kingma2013auto} optimize the evidence lower bound (ELBO), which consists of a reconstruction loss and a KL divergence term.
+Classical VAEs are one-step generators when using a Gaussian prior. Today's prevailing VAE applications often resort to priors learned from other methods, \eg, diffusion \cite{rombach2022high} or autoregressive models \cite{esser2021taming}, where VAEs effectively act as tokenizers.
+
+\paragraph{Normalizing Flows (NFs).}
+NFs~\cite{rezende2015variational,dinh2016density,zhai2024normalizing} learn mappings from data to noise and optimize the log-likelihood of samples.
+These methods require invertible architectures and computable Jacobians. Conceptually, NFs operate as one-step generators at inference, with computation performed by the \mbox{inverse} of the network.
+
+\paragraph{Moment Matching.}
+Moment-matching methods \cite{dziugaite2015training,li2015generative} seek to minimize the Maximum Mean Discrepancy (MMD) between the generated and data distributions.
+Moment Matching has recently been extended to one-/few-step diffusion \cite{zhou2025inductive}.
+Related to MMD, our approach also leverages the concepts of kernel functions and positive/negative samples. However, our approach focuses on a drifting field that explicitly governs the sample drifts at training time. Further discussion is in \ref{sec:theory_mmd_relation}.
+
+\paragraph{Contrastive Learning.}
+Our drifting field is driven by positive samples from the data distribution and negative samples from the generated distribution.
+This is conceptually related to the positive and negative samples in \textit{contrastive representation learning} \cite{hadsell2006dimensionality,oord2018representation}.
+The idea of contrastive learning has also been extended to generative models, \eg, to GANs~\cite{unterthiner2017coulomb,kang2020contragan} or Flow Matching~\cite{stoica2025contrastive}.
+
+
+% !TeX root = ../main.tex
+\section{Drifting Models for Generation}
+\label{sec:methodology}
+
+We propose Drifting Models, which formulate generative modeling as a \emph{training-time} evolution of the pushforward distribution via a drifting field.
+Our model naturally performs one-step generation at inference time.
+
+\subsection{Pushforward at Training Time}
+\label{subsec:training_time_pushforward}
+
+Consider a neural network $f: \mathbb{R}^C \mapsto \mathbb{R}^D$. The input of $f$ is $\e \sim p_{\e}$ (\eg, any noise of dimension $C$), and the output is denoted by $\x = f(\e) \in \mathbb{R}^D$. In general, the input and output dimensions need not be equal.
+
+We denote the distribution of the network output by $q$, \ie, $\x = f(\e) \sim q$.
+In probability theory, $q$ is referred to as the \textit{pushforward} distribution of $p_\e$ under $f$, denoted by:
+\begin{equation}
+q = f_{\#}p_\e.
+\end{equation}
+Here, ``$f_{\#}$" denotes the pushforward induced by $f$.
+Intuitively, this notation means that $f$ transforms a distribution $p_{\e}$ into another distribution $q$.
+The goal of generative modeling is to find $f$ such that $f_{\#}p_{\e} \approx p_\text{data}$.
+
+Since neural network \textit{training} is inherently iterative (\eg, SGD), the training process produces a sequence of models $\{f_i\}$, where $i$ denotes the training iteration.
+This corresponds to a sequence of pushforward distributions $\{q_i\}$ during training, where
+$q_i = [f_i]_{\#}p_{\e}$ for each $i$.
+The training process progressively evolves $q_i$ to match $p_{\text{data}}$.
+
+When the network $f$ is updated,
+a sample at training iteration $i$ is implicitly ``drifted'' as:
+$\x_{i+1} = \x_{i} + \Delta\x_{i}$, where $ \Delta\x_{i}:=f_{i+1}(\e) - f_{i}(\e)$ arises from parameter updates to $f$.
+This implies that the update of $f$ determines the ``\textit{residual}'' of $\x$, which we refer to as the ``drift''.
+
+\subsection{Drifting Field for Training}
+\label{subsec:training_objective}
+
+Next, we define a \emph{\textbf{drifting field}} to govern the training-time evolution of the samples $\x$ and, consequently, the pushforward distribution $q$.
+A drifting field is a function that computes $ \Delta\x$ given $\x$. Formally, denoting this field by $\V_{p,q}(\cdot)\colon \R^d \to \R^d$, we have:
+\begin{equation}
+\x_{i+1}=\x_i+\V_{p,q_i}(\x_i),
+\end{equation}
+Here, $\x_i=f_i(\e) \sim q_i$ and after drifting we denote $\x_{i+1}\sim q_{i+1}$.
+The subscripts $p,q$ denote that this field depends on $p$ (\eg, $p=p_\text{data}$) and the current distribution $q$.
+
+Ideally, when $p=q$, we want all $\x$ to stop drifting \ie, $\V=\textbf{0}$.
+In this paper, we consider the following proposition:
+\begin{proposition}
+Consider an \textbf{anti-symmetric} drifting field:
+\begin{equation}
+\label{eq:asym}
+\V_{p,q}(\x) = - \V_{q,p}(\x),\quad \forall \x.
+\end{equation}
+Then we have: $\quad q=p \quad \Rightarrow \quad \V_{p,q}(\x) = \mathbf{0},\forall \x$.
+\end{proposition}
+
+The proof is straightforward\footnotemark.
+Intuitively, anti-symmetry means that swapping $p$ and $q$ simply flips the sign of the drift.
+This proposition implies that if the pushforward distribution $q$ matches the data distribution $p$, the drift is zero for any sample and the model achieves an equilibrium.
+
+\footnotetext{$q{=}p \Rightarrow \V_{p,q}{=}\V_{q,p}{=}{-}\V_{p,q} \Rightarrow \V_{p,q}{=}\textbf{0}$}
+
+We note that the converse implication, \ie, $\V_{p,q}=\mathbf{0}\Rightarrow q=p$, is false in general for arbitrary choices of $\V$.
+For our kernelized formulation (Sec.~\ref{subsec:instantiation_field}), we give sufficient conditions under which $\V_{p,q}\approx\mathbf{0}$ implies $q\approx p$ (Appendix~\ref{sec:theory_identifiability}).
+
+
+
+\paragraph{Training Objective.}
+The property of equilibrium motivates a definition of a training objective.
+Let $f_\theta$ be a network parameterized by $\theta$, and $\x = f_\theta(\e)$ for $\e \sim p_\e$. At the equilibrium where $\V=\textbf{0}$, we set up the following \textit{fixed-point} relation:
+\begin{equation}
+\label{eq:eq_cond}
+f_{\otheta}(\e)
+=
+f_{\otheta}(\e)
++
+\V_{p,q_{\otheta}}\!\big(f_{\otheta}(\e)\big).
+\end{equation}
+Here, $\otheta$ denotes the optimal parameters that can achieve the equilibrium, and $q_\otheta$ denotes the pushforward of $f_{\otheta}$.
+
+This equation motivates a fixed-point iteration during training. At iteration $i$, we seek to satisfy:
+\begin{equation}
+f_{\theta_{i+1}}(\e)
+\leftarrow
+f_{\theta_{i}}(\e)
++
+\V_{p,q_{\theta_{i}}}\!\big(f_{\theta_{i}}(\e)\big).
+\end{equation}
+We convert this update rule into a loss function:
+\begin{equation}
+\label{eq:train_loss}
+\mathcal{L}
+=
+\mathbb{E}_{\e}
+\Big[
+\big\|
+\underbrace{f_{\theta}(\e)}_{\text{prediction}}
+-
+\underbrace{
+\text{\texttt{stopgrad}}\big(
+f_{\theta}(\e)
++
+\V_{p,q_{\theta}}\!\big(f_{\theta}(\e)\big)
+\big)
+}_{\text{frozen target}}
+\big\|^2
+\Big].
+\end{equation}
+Here, the stop-gradient operation provides a frozen state from the last iteration, following \cite{chen2021exploring,song2023improved}.
+Intuitively, we compute a frozen target and move the network prediction toward it.
+
+We note that the \textit{value} of our loss function $\mathcal{L}$ is equal to $\mathbb{E}_{\e}
+\big[\|\V(f(\e))\|^2 \big]$, that is, the squared norm of the drifting field $\V$.
+With the stop-gradient formulation, our solver does not directly back-propagate through $\V$, because $\V$ depends on $q_\theta$ and back-propagating through a distribution is nontrivial.
+Instead, our formulation minimizes this objective \textit{indirectly}: it moves $\x=f_{\theta}(\e)$ towards its drifted version, \ie, towards $\x+\Delta\x$ that is frozen at this iteration.
+
+\subsection{Designing the Drifting Field}
+\label{subsec:instantiation_field}
+
+The field $\V_{p,q}$ depends on two distributions $p$ and $q$. To obtain a computable formulation, we consider the form:
+\begin{equation}
+\label{eq:kernel_K}
+\V_{p,q}(\x)=\mathbb E_{\yp \sim p}\mathbb E_{\yn \sim q} [\mathcal{K}(x,\yp,\yn)],
+\end{equation}
+where $\mathcal{K}(\cdot,\cdot,\cdot)$ is a kernel-like function describing interactions among three sample points. $\mathcal{K}$ can optionally depend on $p$ and $q$.
+Our framework supports a broad class of functions $\mathcal{K}$, as long as $\V=\text{0}$ when $p=q$.
+
+For the instantiation in this work, we introduce a form of $\V$ driven by attraction and repulsion.
+We define the following fields inspired by the \textit{mean-shift} method \cite{cheng1995mean}:
+\begin{equation}
+\begin{aligned}
+\Vp{p}(\x)
+&:= \frac{1}{Z_{p}} {\mathbb{E}_{p}\!\left[k(\x,\yp)(\yp - \x)\right]}, \\
+\Vn{q}(\x)
+&:= \frac{1}{Z_{q}}
+{\mathbb{E}_{q}\!\left[k(\x,\yn)(\yn - \x)\right]}.
+\end{aligned}
+\label{eq:meanshift}
+\end{equation}
+Here, $Z_{p}$ and $Z_{q}$ are normalization factors:
+\begin{equation}
+\label{eq:Z}
+\begin{aligned}
+Z_{p}(\x) := \mathbb{E}_{p} [k(\x,\yp)], \\
+Z_{q}(\x) := \mathbb{E}_{q} [k(\x,\yn)].
+\end{aligned}
+\end{equation}
+Intuitively, Eq.~(\ref{eq:meanshift}) computes the weighted mean of the vector difference $\y - \x$. The weights are given by a kernel $k(\cdot, \cdot)$ normalized by (\ref{eq:Z}).
+We then define $\V$ as:
+\begin{equation}
+\V_{p,q}(\x) := \Vp{p}(\x) - \Vn{q}(\x).
+\label{eq:V_pos_neg}
+\end{equation}
+Intuitively, this field can be viewed as attracting by the data distribution $p$ and repulsing by the sample distribution $q$.
+This is illustrated in Fig.~\ref{fig:micro_shift}.
+
+Substituting Eq.~(\ref{eq:meanshift}) into
+Eq.~(\ref{eq:V_pos_neg}), we obtain:
+\begin{equation}
+\V_{p,q}(\x)
+= \frac{1}{Z_p Z_q} {\mathbb{E}_{p,q}\!\left[k(\x,\yp)k(\x,\yn)(\yp - \yn)\right]}.
+\label{eq:VZZ}
+\end{equation}
+Here, the vector difference reduces to $\y^+ - \y^-$; the weight is computed from two kernels and normalized jointly.
+This form is an instantiation of Eq.~(\ref{eq:kernel_K}).
+It is easy to see that $\V$ is anti-symmetric: $\V_{p,q}=-\V_{q,p}$. In general, our method does not require $\V$ to be decomposed into attraction and repulsion; it only requires $\V=\text{0}$ when $p=q$.
+
+
+% ==============================================================
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/drift_field.png}
+    \caption{\textbf{Illustration of drifting a sample.}
+    A generated sample $\mathbf{x}$ (black) drifts according to a vector:
+    $\V=\V^+_{p}-\V^-_{q}$.
+    Here, $\V^+_{p}$ is the mean-shift vector of the positive samples (blue) and $\V^-_{q}$ is the mean-shift vector of the negative samples (orange): see Eq.~(\ref{eq:meanshift}).
+    $\x$ is attracted by $\V^+_{p}$ and repulsed by $\V^-_{q}$.
+    }
+    \label{fig:micro_shift}
+\end{figure}
+% ==============================================================
+
+\paragraph{Kernel.}
+The kernel $k(\cdot, \cdot)$ can be a function that measures the similarity. In this paper, we adopt:
+\begin{equation}
+\label{eq:kernel}
+k(\x, \y) = \exp\left(-\frac{1}{\tau} \|\x - \y\|\right),
+\end{equation}
+where $\tau$ is a temperature and $\|\cdot\|$ is $\ell_2$-distance. We view $\tilde{k}(\x, \y) \triangleq\frac{1}{Z}k(\x, \y)$ as a normalized kernel, which absorbs the normalization in Eq.~(\ref{eq:VZZ}).
+
+In practice, we implement $\tilde{k}$ using a \textit{softmax} operation, with logits given by $-\frac{1}{\tau} \|\x - \y\|$, where the softmax is taken over $\y$.
+This softmax operation is similar to that of InfoNCE \cite{oord2018representation} in contrastive learning.
+In our implementation, we further apply an extra softmax normalization over the set of $\{\x\}$ within a batch, which slightly improves performance in practice. This additional normalization does not alter the antisymmetric property of the resulting $\V$.
+
+\paragraph{Equilibrium and Matched Distributions.}
+Since our training loss in Eq.~(\ref{eq:train_loss}) encourages minimizing $\|\V\|^2$, we hope that $\V \approx \textbf{0}$ leads to $q\approx p$.
+While this implication does not hold for arbitrary choices of $\V$, we empirically observe that decreasing the value of $\|\V\|^2$ correlates with improved generation quality. In Appendix~\ref{sec:theory_identifiability}, we provide an identifiability heuristic: for our kernelized construction, the zero-drift condition imposes a large set of bilinear constraints on $(p,q)$, and under mild non-degeneracy assumptions this forces $p$ and $q$ to match (approximately).
+% In Appendix~\ref{sec:theory_identifiability}, we show that under certain assumptions and with kernelization, $\V_{p,q}\approx\mathbf{0}$ implies $q\approx p$.
+
+
+%
+
+% ========================================
+\begin{algorithm}[t]
+\caption{
+\textbf{Training Loss.} Note: for brevity, here the negative samples $\texttt{y\_neg}$ are from the same batch of generated data, though they can include other source of negatives.
+}
+\label{alg:training_code}
+\begin{lstlisting}
+# f: generator
+# y_pos: [N_pos, D], data samples
+
+e = randn([N, C]) # noise
+x = f(e) # [N, D], generated samples
+y_neg = x # reuse x as negatives
+
+V = compute_V(x, y_pos, y_neg)
+x_drifted = stopgrad(x + V)
+
+loss = mse_loss(x - x_drifted)
+\end{lstlisting}
+\end{algorithm}
+
+\paragraph{Stochastic Training.}
+In stochastic training (\eg, mini-batch optimization), we estimate $\V$ by approximating the expectations in Eq.~(\ref{eq:VZZ}) with empirical means.
+For each training step, we draw $N$ samples of noise $\e \sim
+p_\e$ and compute a batch of $\x=f_\theta(\e)\sim q$.
+The generated samples also serve as the negative samples in the same batch, \ie, $\y^- \sim q$.
+On the other hand, we sample $N_\text{pos}$ data points $\y^+ \sim p_\text{data}$. The drifting field $\V$ is computed in this batch of positive and negative samples.
+Alg.~\ref{alg:training_code} provide the pseudocode for such a training step, where \texttt{compute\_V} is given in \cref{sec:appendix_compute_V}.
+
+\subsection{Drifting in Feature Space}
+\label{subsec:feature_space}
+
+Thus far, we have defined the objective (\ref{eq:train_loss}) directly in the raw data space. Our formulation can be extended to any feature space.
+Let $\phi$ denote a feature extractor (\eg, an image encoder) operating on real or generated samples. We rewrite the loss (\ref{eq:train_loss}) in the feature space as:
+\begin{equation}
+\mathbb{E}\!\left[
+\left\|
+\phi(\x)
+-
+\text{\texttt{stopgrad}}\Big(
+\phi(\x)
++
+\V\big(\phi(\x)\big)
+\Big)
+\right\|^2
+\right].
+\label{eq:feature_space}
+\end{equation}
+Here, $\x=f_\theta(\e)$ is the output (\eg, images) of the generator. $\V$ is defined in the feature space: in practice, this means that
+$\phi(\y^+)$ and $\phi(\y^-)$ serve as the positive/negative samples.
+It is worth noting that feature encoding is a training-time operation and is not used at inference time.
+
+
+This can be further extended to multiple features, \eg, at multiple scales and locations:
+\begin{equation}
+\sum_j\mathbb{E}\!\left[
+\left\|
+\phi_j(\x)
+-
+\text{\texttt{stopgrad}}\Big(
+\phi_j(\x)
++
+\V\big(\phi_j(\x)\big)
+\Big)
+\right\|^2
+\right].
+\label{eq:feature_space_multi}
+\end{equation}
+Here, $\phi_j$ represents the feature vectors at the $j$-th scale and/or location from an encoder $\phi$.
+With a ResNet-style image encoder \cite{he2016deep}, we compute drifting losses across multiple scales and locations, which provides richer gradient information for training.
+
+
+The feature extractor plays an important role in the generation of high-dimensional data.
+As our method is based on the kernel $k(\cdot, \cdot)$ for characterizing sample similarities, it is desired for semantically similar samples to stay close in the feature space. This goal is aligned with self-supervised learning (\eg, \citealt{he2020momentum,chen2020simple}).
+We use pre-trained self-supervised models as the feature extractor.
+
+\paragraph{Relation to Perceptual Loss.}
+Our feature-space loss is related to perceptual loss \cite{zhang2018unreasonable} but is conceptually different. The perceptual loss minimizes: $\|\phi(\x)-\phi(\x_\text{target})\|_2^2$, that is, the regression target is $\phi(\x_\text{target})$ and requires pairing $\x$ with its target.
+In contrast, our regression target in (\ref{eq:feature_space}) is
+$
+\phi(\x)
++
+\V\big(\phi(\x)\big)
+$, where the drifting is in the feature space and requires no pairing.
+In principle, our feature-space loss aims to match the pushforward distributions $\phi_\#q$ and $\phi_\#p$.
+
+\paragraph{Relation to Latent Generation.}
+Our feature-space loss is \textit{orthogonal} to the concept of generators in the latent space (\eg, Latent Diffusion \cite{rombach2022high}).
+In our case, when using $\phi$,
+the generator $f$ can still produce outputs in the pixel space or the latent space of a tokenizer.
+If the generator $f$ is in the latent space and the feature extractor $\phi$ is in the pixel space, the tokenizer decoder is applied before extracting features from $\phi$.
+
+
+\subsection{Classifier-Free Guidance}
+\label{subsec:additive_guidance}
+
+Classifier-free guidance (CFG)~\cite{ho2022classifier} improves generation quality by extrapolating between class-conditional and unconditional distributions.
+Our method naturally supports a related form of guidance.
+
+
+In our model, given a class label $c$ as the condition, the underlying target distribution $p$ now becomes $p_{\text{data}}(\cdot|c)$, from which we can draw positive samples: $\y^+ \sim p_{\text{data}}(\cdot|c)$.
+To achieve guidance, we draw {negative} samples either from generated samples or \textit{real} samples from different classes.
+Formally, the negative sample distribution is now:
+\begin{equation}
+\tilde{q}(\cdot|c) \triangleq (1-\gamma)\,q_\theta(\cdot|c)   + \gamma\,p_{\text{data}}(\cdot | \varnothing).
+\label{eq:cfg1}
+\end{equation}
+Here, $\gamma \in [0, 1)$ is a mixing rate,
+and $p_{\text{data}}(\cdot | \varnothing)$ denotes the \textit{unconditional} data distribution\footnotemark{}.
+
+The goal of learning is to find $\tilde{q}(\cdot|c)=p_\text{data}(\cdot|c)$.
+Substituting it into (\ref{eq:cfg1}), we obtain:
+\begin{equation}
+q_\theta(\cdot|c) = \alpha\, p_{\text{data}}(\cdot|c) - (\alpha - 1)\, p_{\text{data}}(\cdot | \varnothing).
+\label{eq:cfg2}
+\end{equation}
+where $\alpha=\frac{1}{1-\gamma} \geq 1$.
+This implies that $q_\theta(\cdot|c)$ is to approximate a linear combination of conditional and unconditional data distributions. This follows the spirit of original CFG.
+
+
+\footnotetext{This should be the data distribution excluding the class $c$. For simplicity, we use the unconditional data distribution.}
+
+In practice, Eq.~(\ref{eq:cfg1}) means that we sample extra negative examples from the data in $p_{\text{data}}(\cdot | \varnothing)$, in addition to the generated data. The distribution $q_\theta(\cdot|c)$ corresponds to a class-conditional network $f_\theta(\cdot | c)$, similar to common practice \cite{ho2022classifier}.
+We note that, in our method, CFG is a \textit{training-time} behavior by design: the one-step (1-NFE) property is preserved at inference time.
+
+
+
+
+
+\section{Implementation for Image Generation}
+\label{sec:impl}
+
+We describe our implementation for image generation on ImageNet \cite{deng2009imagenet} at resolution 256$\times$256. Full implementation details are provided in Appendix \ref{sec:appendix_impl}.
+
+\paragraph{Tokenizer.} By default, we perform generation in latent space \cite{rombach2022high}. We adopt the standard SD-VAE tokenizer, which produces a 32$\times$32$\times$4 latent space in which generation is performed.
+
+\paragraph{Architecture.} Our generator ($f_\theta$) has a DiT-like \cite{peebles2023scalable} architecture.
+Its input is 32$\times$32$\times$4-dim Gaussian noise $\e$, and its output is the generated latent $\x$ of the same dimension.
+We use a patch size of 2, \ie, like DiT/2.
+Our model uses adaLN-zero \cite{peebles2023scalable} for processing class-conditioning or other extra conditioning.
+
+
+\paragraph{CFG conditioning.} We follow \cite{geng2025improved} and adopt CFG-conditioning. At training time, a CFG scale $\alpha$ (Eq.~(\ref{eq:cfg2})) is randomly sampled. Negative samples are prepared based on $\alpha$ (Eq.~(\ref{eq:cfg1})), and the network is conditioned on this value. At inference time, $\alpha$ can be freely specified and varied without retraining. Details are in \ref{sec:appendix_cfg}.
+
+
+\paragraph{Batching.} The pseudo-code in Alg.~\ref{alg:training_code} describes a batch of $N=N_\text{neg}$ generated samples. In practice, when class labels are involved, we sample a batch of $N_\text{c}$ class labels. For each label, we perform Alg.~\ref{alg:training_code} \textit{independently}. Accordingly, the \textit{effective} batch size is $B=N_\text{c}{\times}N$, which consists of $N_\text{c}{\times}N$ negatives and $N_\text{c}{\times}N_\text{pos}$ positives.
+
+We define a ``training epoch'' based on the number of generated samples $\x$.
+In particular, each iteration generates $B$ samples, and one epoch corresponds to $N_\text{data}/B$ iterations for a dataset of size $N_\text{data}$.
+
+\paragraph{Feature Extractor.} Our model is trained with drifting loss in a feature space (Sec.~\ref{subsec:feature_space}).
+The feature extractor $\phi$ is an image encoder.
+We mainly consider a ResNet-style \cite{he2016deep} encoder, pre-trained by self-supervised learning, \eg, MoCo \cite{he2020momentum} and SimCLR \cite{chen2020simple}.
+When these pre-trained models operate in pixel space, we apply the VAE decoder to map our generator’s latent-space output back to pixel space for feature extraction. Gradients are backpropagated through the feature encoder and VAE decoder.
+We also study an MAE \cite{he2022masked} pre-trained in latent space (detailed in \ref{sec:appendix_latent_mae}).
+
+For all ResNet-style models, features are extracted from multiple stages (\ie, multi-scale feature maps). The drifting loss in (\ref{eq:feature_space}) is computed at each scale and then combined. We elaborate on the details in \ref{sec:appendix_feature_and_loss_normalization}.
+
+
+\paragraph{Pixel-space Generation.}
+While our experiments primarily focus on latent-space generation, our models support pixel-space generation. In this case, $\e$ and $\x$ are both 256$\times$256$\times$3. We use a patch size of 16 (\ie, DiT/16). The feature extractor $\phi$ is directly on the pixel space.
+
+
+
+% ==============================================================
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{figures/dynamics_comparison.png}
+    \vspace{-1.5em}
+    \caption{\textbf{Evolution of the generated distribution.}
+    The distribution $q$ ({\color{orange}{orange}}) evolves toward a bimodal target $p$ ({\color{blue}{blue}}) during training.
+    We show three initializations of $q$:
+    \textbf{(top)}: initialized between the two modes;
+    \textbf{(middle)}: initialized far from both modes;
+    \textbf{(bottom)}: initialized collapsed onto one mode.
+    Across all initializations, our method approximates the target distribution without mode collapse.
+    }
+\label{fig:drifting_evolution_macro}
+\vspace{-1em}
+\end{figure}
+% ==============================================================
+
+
+\section{Experiments}
+
+\subsection{Toy Experiments}
+
+\paragraph{Evolution of the generated distribution.}
+\cref{fig:drifting_evolution_macro} visualizes a 2D toy case, where $q$ evolves toward a bimodal distribution $p$ at training time, under three initializations.
+
+In this toy example, our method approximates the target distribution without exhibiting mode collapse.
+This holds even when $q$ is initialized in a collapsed single-mode state (bottom).
+This provides intuition into why our method is robust to mode collapse:
+if $q$ collapses onto one mode, other modes of $p$ will attract the samples, allowing them to continue moving and pushing $q$ to continue evolving.
+
+% ==============================================================
+\begin{figure}[t]
+    \centering    \includegraphics[width=\linewidth]{figures/toy_checkerboard_progression.png}    \includegraphics[width=\linewidth]{figures/toy_swiss_progression.png}
+    \vspace{-.75em}
+    \caption{
+    \textbf{Evolution of samples.}
+    We show generated points sampled at different training iterations, along with their loss values.
+    The loss (whose value equals $\|V\|^2$) decreases as the distribution converges to the target. (y-axis is log-scale.)
+    }
+    \label{fig:toy_distributions}
+\end{figure}
+% ==============================================================
+
+\paragraph{Evolution of the samples.}
+\cref{fig:toy_distributions} shows the training process
+on two 2D cases. A small MLP generator is trained.
+The loss (whose value equals $\|\V\|^2$) decreases as the generated distribution converges to the target.
+This is in line with our motivation that reducing the drift and pushing towards the equilibrium will approximately yield $p = q$.
+
+
+
+
+% ###################################
+\begin{table}[t]
+% \vspace{-.5em}
+\caption{
+\textbf{Importance of anti-symmetry:}
+breaking the anti-symmetry leads to failure. Here, the anti-symmetric case is defined in Eq.~(\ref{eq:V_pos_neg}) and Eq.~(\ref{eq:VZZ});
+other destructive cases are defined in similar ways.
+(Setting: B/2 model, 100 epochs)
+}
+\label{tab:ablation_antisymmetry}
+% \vspace{.5em}
+\tablestyle{4pt}{1.05}
+\tablefontsize
+\begin{tabular}{y{100}x{60}z{35}}
+\toprule
+case & drifting field $\V$ & FID \\
+\midrule
+\textbf{anti-symmetry} (default) & $\V^+ - \V^-$ & \textbf{8.46} \\
+\midrule
+1.5$\times$ attraction & $1.5\V^+ - \V^-$ & 41.05 \\
+1.5$\times$ repulsion & $\V^+ - 1.5\V^-$ & 46.28 \\
+2.0$\times$ attraction & $2\V^+ - \V^-$ & 86.16 \\
+2.0$\times$ repulsion & $\V^+ - 2\V^-$ & 112.84 \\
+attraction-only & $\V^+$ & 177.14 \\
+\bottomrule
+\end{tabular}
+\end{table}
+% ###################################
+
+\subsection{ImageNet Experiments}
+
+We evaluate our models on ImageNet 256$\times$256. Ablation studies use a B/2 model on the SD-VAE latent space, trained for 100 epochs.
+The drifting loss is in a feature space computed by a latent-MAE encoder.
+We report FID \cite{fid} on 50K generated images.
+We analyze the results as follows.
+
+\paragraph{Anti-symmetry.}
+Our derivation of equilibrium requires the drifting field to be anti-symmetric; see Eq.~(\ref{eq:asym}). In Table~\ref{tab:ablation_antisymmetry}, we conduct a \textit{destructive} study that intentionally breaks this anti-symmetry.
+The anti-symmetric case (our ablation default) works well, while other cases fail catastrophically.
+
+Intuitively, for a sample $\x$,
+we want attraction from $p$ to be canceled by repulsion from $q$ when $p$ and $q$ match. This equilibrium is not achieved in the destructive cases.
+
+% ###################################
+\DeclareRobustCommand{\bgpos}[1]{%
+  \begingroup
+  \setlength{\fboxsep}{1pt}%
+  \raisebox{0pt}[\height][0pt]{\colorbox{blue!15}{#1}}%
+  \endgroup
+}
+\DeclareRobustCommand{\bgneg}[1]{%
+  \begingroup
+  \setlength{\fboxsep}{1pt}%
+  \raisebox{0pt}[\height][0pt]{\colorbox{orange!15}{#1}}%
+  \endgroup
+}
+\begin{table}[t]
+    \centering
+    \caption{
+    \textbf{Allocation of positive and negative samples.}
+    In both sub-tables, we control the total compute by fixing the epochs (100) and the batch size $B=N_\text{c}{\times}N_\text{pos}$ (4096). Here, $N_\text{c}$ is for class labels. Under the same budget, increasing \bgpos{positive} samples (\textbf{left}) and \bgneg{negative} samples (\textbf{right}) improves generation quality. (Setting: B/2 model, 100 epochs)
+    }
+    \label{tab:ablation_scaling}
+    % \vspace{.5em}
+    \begin{minipage}[t]{0.48\linewidth}
+        \centering
+        \tablestyle{2.5pt}{1.02}
+        \tablefontsize
+        \begin{tabular}{c >{\columncolor{blue!15}}c c | c | r}
+        \toprule
+        $N_\text{c}$ & {$N_\text{pos}$} & $N_\text{neg}$ & $B$ & FID  \\
+        \midrule
+        64 &  1 & 64 & 4096 & 20.43 \\
+        64 &  16 & 64 & 4096 & 10.39 \\
+        64 &  32 & 64 & 4096 & 8.97 \\
+        64 &  \textbf{64} & 64 & 4096 & \textbf{8.46} \\
+        \bottomrule
+        \end{tabular}
+    \end{minipage}
+    \hfill
+    \begin{minipage}[t]{0.48\linewidth}
+        \centering
+        \tablestyle{2.5pt}{1.02}
+        \tablefontsize
+        \begin{tabular}{c c >{\columncolor{orange!15}}c | c | r}
+        \toprule
+        $N_\text{c}$ & $N_\text{pos}$ & $N_\text{neg}$ & $B$ & FID  \\
+        \midrule
+        512 & 8 & 8 & 4096 & 11.82 \\
+        256 & 16 & 16 & 4096 & 10.16 \\
+        128 & 32 & 32 & 4096 & 9.32 \\
+        64 & 64 & \textbf{64} & 4096 & \textbf{8.46} \\
+        \bottomrule
+        \end{tabular}
+    \end{minipage}
+\end{table}
+% ###################################
+
+\paragraph{Allocation of Positive and Negative Samples.}
+Our method samples positive and negative examples to estimate $\V$ (see Alg.~\ref{alg:training_code}).
+In Table~\ref{tab:ablation_scaling}, we study the effect of \bgpos{$N_\text{pos}$} and \bgneg{$N_\text{neg}$}, under fixed epochs and fixed batch size $B$.
+
+
+Table~\ref{tab:ablation_scaling} shows that using larger $N_\text{pos}$ and $N_\text{neg}$ is beneficial. Larger sample sizes are expected to improve the accuracy of the estimated $\V$ and hence the generation quality.
+This observation aligns with results in contrastive learning \cite{oord2018representation,he2020momentum,chen2020simple}, in which larger sample sets improve representation learning.
+
+% ###################################
+\begin{table}[t]
+    \centering
+    \caption{\textbf{Feature space for drifting.}
+    We compare self-supervised learning (SSL) encoders.
+    Standard SimCLR and MoCo encoders achieve competitive results, whereas our customized latent-MAE performs best and benefits from increased width and longer training.
+    (Generator setting: B/2 model, 100 epochs)
+    }
+    \label{tab:ablation_drift_space}
+    % \vspace{.5em}
+    \tablestyle{3pt}{1.02}
+    \tablefontsize
+    \begin{tabular}{l | c c c c | r}
+    \toprule
+    \multicolumn{1}{c}{} & \multicolumn{4}{c}{feature encoder ($\phi$)} & \\
+    \cmidrule(lr){2-5}
+    \multicolumn{1}{c}{SSL method} & arch & block & width & \multicolumn{1}{c}{SSL ep.} & FID \\
+    \midrule
+    SimCLR & ResNet & bottleneck & 256 & 800 & 11.05 \\
+    MoCo-v2 & ResNet & bottleneck & 256 & 800 & 8.41 \\
+    \midrule
+    latent-MAE (default) & ResNet & basic & 256 & 192 & 8.46 \\
+    latent-MAE & ResNet & basic & 384 & 192 & 7.26 \\
+    latent-MAE & ResNet & basic & 512 & 192 & 6.49 \\
+    latent-MAE & ResNet & basic & 640 & 192 & 6.30 \\
+    \midrule
+    latent-MAE & ResNet & basic & 640 & 1280 & 4.28 \\
+    latent-MAE + cls ft & ResNet & basic & 640 & 1280 & \textbf{3.36} \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+% ###################################
+
+\paragraph{Feature Space for Drifting.}
+Our model computes the drifting loss in a feature space (Sec.~\ref{subsec:feature_space}). Table~\ref{tab:ablation_drift_space} compares the feature encoders.
+Using the public pre-trained encoders from SimCLR \cite{chen2020simple} and MoCo v2 \cite{chen2020improved}, our method obtains decent results.
+
+These standard encoders operate in the pixel domain, which requires running the VAE decoder at training.
+To circumvent this, we pre-train a ResNet-style model with the MAE objective \cite{he2022masked}, directly on the latent space.
+The feature space produced by this ``latent-MAE'' performs strongly (Table~\ref{tab:ablation_drift_space}). Increasing the MAE encoder width and the number of pre-training epochs both improve generation quality; fine-tuning it with a classifier (`cls ft') boosts the results further to 3.36 FID.
+
+The comparison in Table~\ref{tab:ablation_drift_space} shows that the quality of the feature encoder plays an important role.
+We hypothesize that this is because our method depends on a kernel $k(\cdot, \cdot)$ (see Eq.~(\ref{eq:kernel})) to measure sample similarity. Samples that are closer in feature space generally yield stronger drift, providing richer training signals. This goal is aligned with the motivation of self-supervised learning.
+A strong feature encoder reduces the occurrence of a nearly ``flat'' kernel (\ie, $k(\cdot, \cdot)$ vanishes because all samples are far away).
+
+
+On the other hand, we report that we were unable to make our method work on ImageNet without a feature encoder. In this case, the kernel may fail to effectively describe similarity, even in the presence of a latent VAE. We leave further study of this limitation for future work.
+
+% ###################################
+\begin{table}[t]
+    \centering
+    \caption{\textbf{From ablation to final setting.} We train our model for more epochs, adjust hyper-parameters for this regime, and use a larger model size.
+    }
+    % \vspace{.5em}
+\label{tab:ablation_final}
+    \tablestyle{6pt}{1.02}
+    \tablefontsize
+    \begin{tabular}{l |l r| c}
+    \toprule
+    case & arch & ep & FID \\
+    \midrule
+    (a) baseline (from Table~\ref{tab:ablation_drift_space}) & B/2 & 100 & 3.36 \\
+    \midrule
+    (b) longer & B/2 & 320 & 2.51 \\
+    (c) longer + hyper-param. & B/2 & 1280 & 1.75 \\
+    (d) larger model & L/2  & 1280 & \textbf{1.54} \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+% ###################################
+
+% ###################################
+\newcommand\headspace{\hspace{.2em}}
+\colorlet{mygray}{black!40}
+\newcommand{\cg}{\color{mygray}}
+\begin{table}[!tb]
+    \centering
+    \caption{\textbf{System-level comparison: ImageNet 256$\times$256 generation in {latent} space.}
+    FID is on 50K images, all reported with CFG if applicable.
+    The parameter numbers are ``generator + decoder''. All generators are trained from scratch (\ie, not distilled).
+    }
+    % \vspace{.5em}
+    \label{tab:in256_latent}
+    \tablestyle{2pt}{1.02}
+    \tablefontsize
+    \begin{tabular}{@{}l c c c r r@{}}
+    \toprule
+    method & space & params & NFE & FID$\downarrow$ & IS$\uparrow$ \\    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Multi-step Diffusion/Flows}} \\
+    \headspace \cg DiT-XL/2 \tiny\cite{peebles2023scalable}  & \cg \tiny SD-VAE & \cg \tiny 675M+49M & \cg \tiny 250$\times$2 & \cg 2.27 & \cg 278.2 \\
+    \headspace \cg SiT-XL/2 \tiny\cite{ma2024sit} & \cg \tiny SD-VAE & \cg \tiny 675M+49M & \cg \tiny 250$\times$2 & \cg 2.06 & \cg 270.3 \\
+    \headspace \cg SiT-XL/2+REPA \tiny\cite{yu2024representation}& \cg \tiny SD-VAE & \cg \tiny 675M+49M & \cg \tiny 250$\times$2 & \cg 1.42 & \cg 305.7 \\
+    \headspace \cg LightningDiT-XL/2 \tiny\cite{yao2025reconstruction}& \cg \tiny VA-VAE & \cg \tiny 675M+70M & \cg \tiny 250$\times$2 & \cg 1.35 & \cg 295.3 \\
+    \headspace \cg RAE+DiT$^{\text{DH}}$-XL/2 \tiny\cite{zheng2025diffusion} & \cg \tiny RAE & \cg \tiny 839M+415M & \cg \tiny 50$\times$2 & \cg \textbf{1.13} & \cg 262.6 \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Single-step Diffusion/Flows}} \\
+    \headspace iCT-XL/2 \tiny\cite{song2023improved}       & \tiny SD-VAE & \tiny 675M & \tiny 1 & 34.24 & -- \\
+    \headspace Shortcut-XL/2  \tiny\cite{frans2024one} & \tiny SD-VAE & \tiny 675M & \tiny 1 & 10.60 & -- \\
+    \headspace MeanFlow-XL/2 \tiny\cite{geng2025mean}  & \tiny SD-VAE & \tiny 676M & \tiny 1 & 3.43 & -- \\
+    \headspace AdvFlow-XL/2 \tiny\cite{lin2025adversarial} & \tiny SD-VAE & \tiny 673M & \tiny 1 & 2.38 & 284.2 \\
+    \headspace iMeanFlow-XL/2 \tiny\cite{geng2025improved}    & \tiny SD-VAE & \tiny 610M & \tiny 1 & 1.72 & 282.0 \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Drifting Models}} \\
+    \headspace \textbf{Drifting Model, B/2} & \tiny SD-VAE & \tiny 133M & \tiny 1 & 1.75 & 263.2 \\
+    \headspace \textbf{Drifting Model, L/2} & \tiny SD-VAE & \tiny 463M & \tiny 1 & \textbf{1.54} & 258.9 \\
+    \bottomrule
+    \end{tabular}
+    \vspace{-.5em}
+\end{table}
+
+% ###################################
+
+% ###################################
+% Pixel Space Table
+\begin{table}[t]
+    \centering
+    \caption{\textbf{System-level comparison: ImageNet 256$\times$256 generation in {pixel} space.} FID is on 50K images, all reported with CFG if applicable.
+    The parameter numbers are of the generator. All generators are trained from scratch (\ie, not distilled).}
+    \label{tab:in256_pixel}
+    % \vspace{.5em}
+    \tablestyle{2pt}{1.05}
+    \tablefontsize
+    \begin{tabular}{@{}l c c c c r@{}}
+    \toprule
+    method & space & params & NFE & FID$\downarrow$ & IS$\uparrow$ \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Multi-step Diffusion/Flows}} \\
+    \headspace \cg ADM-G \tiny\cite{dhariwal2021diffusion} & \cg pix & \cg 554M & \cg 250$\times$2 & \cg 4.59 & \cg 186.7 \\
+    \headspace \cg SiD, UViT/2 \tiny\cite{hoogeboom2023simple} & \cg pix & \cg 2.5B & \cg 1000$\times$2 & \cg 2.44 & \cg 256.3  \\
+    \headspace \cg VDM++, UViT/2 \tiny\cite{kingma2023understanding} & \cg pix & \cg 2.5B & \cg 256$\times$2 & \cg 2.12 & \cg 267.7 \\
+    \headspace \cg SiD2, UViT/2 \tiny\cite{hoogeboom2024simpler} & \cg pix & \cg -- & \cg 512$\times$2 & \cg 1.73 & \cg -- \\
+    \headspace \cg SiD2, UViT/1 \tiny\cite{hoogeboom2024simpler} & \cg pix & \cg -- & \cg 512$\times$2 & \cg \textbf{1.38} & \cg -- \\
+    \headspace \cg JiT-G/16 \tiny\cite{li2025back} & \cg pix & \cg 2B & \cg 100$\times$2 & \cg 1.82 & \cg 292.6 \\
+    \headspace \cg PixelDiT/16 \tiny\cite{yu2025pixeldit} & \cg pix & \cg 797M & \cg 200$\times$2 & \cg 1.61 & \cg 292.7 \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Single-step Diffusion/Flows}} \\
+    \headspace EPG-L/16 \tiny\cite{lei2025there} & pix & 540M & 1 & 8.82 & -- \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{GANs}} \\
+    \headspace BigGAN \tiny\cite{brock2018large} & pix & 112M & 1 & 6.95 & 152.8 \\
+    \headspace GigaGAN \tiny\cite{kang2023scaling} & pix & 569M & 1 & 3.45 & 225.5 \\
+    \headspace StyleGAN-XL \tiny\cite{sauer2022stylegan} & pix & 166M & 1 & 2.30 & 265.1 \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{Drifting Models}} \\
+    \headspace \textbf{Drifting Model, B/16} & pix & 134M & 1 & 1.76 & 299.7 \\
+    \headspace \textbf{Drifting Model, L/16} & pix & 464M & 1 & \textbf{1.61} & 307.5 \\
+    \bottomrule
+    \end{tabular}
+    \vspace{-.5em}
+\end{table}
+% ###################################
+
+\paragraph{System-level Comparisons.} In addition to the ablation setting, we train stronger variants and summarize them in Table~\ref{tab:ablation_final}.
+We compare with previous methods in Table~\ref{tab:in256_latent}.
+
+Our method achieves \textbf{1.54} FID with \textit{native} 1-NFE generation. It outperforms all previous 1-NFE methods, which are based on approximating diffusion-/flow-based trajectories.
+Notably, our Base-size model competes with previous XL-size models.
+Our best model (FID 1.54) uses a CFG scale of 1.0, which corresponds to ``no CFG’’ in diffusion-based methods.
+Our CFG formulation exhibits a tradeoff between FID and IS (see \ref{section:exp_cfg}), similar to standard CFG.
+
+
+We provide uncurated qualitative results in Appendix~\ref{sec:appendix_qualitative_results}, Fig.~\ref{fig:latent_uncurated_samples_1}-\ref{fig:latent_uncurated_samples_4}, with CFG 1.0.
+Moreover, Fig.~\ref{fig:comparison_imf_1}-\ref{fig:comparison_imf_5} show a side-by-side comparison with improved MeanFlow (iMF) \cite{geng2025improved}, a recent state-of-the-art one-step method.
+
+\paragraph{Pixel-space Generation.} Our method can naturally work \textit{without} the latent VAE, \ie, the generator $f$ directly produces 256$\times$256$\times$3 images. The feature encoder is applied on the generated images for computing drifting loss. We adopt a configuration similar to that of the latent variant; implementation details are in Appendix \ref{sec:appendix_impl}.
+
+Table~\ref{tab:in256_pixel} compares different pixel-space generators.
+Our \textit{one-step}, \textit{pixel-space} method achieves \textbf{1.61} FID, which outperforms or competes with previous multi-step methods.
+Comparing with other one-step, pixel-space methods (GANs), our method achieves 1.61 FID using only 87G FLOPs; by comparison, StyleGAN-XL produces 2.30 FID using 1574G FLOPs.
+More ablations are in \ref{section:exp_pixel_space}.
+
+% ##################################################
+\begin{table}[t]
+    \centering
+    \caption{\textbf{Robotics Control: Comparison with Diffusion Policy.}
+    The evaluation protocol follows Diffusion Policy \citep{chi2025diffusion}.
+    This table involves four single-stage tasks and two multi-stage tasks.
+    ``Drifting Policy'' (ours) replaces the multi-step Diffusion Policy generator with our one-step generator.
+    Success rates are reported as the average over the last 10 checkpoints.
+    }
+    \label{tab:robotics_combined}
+    % \vspace{0.5em}
+    \tablestyle{4pt}{1.0}
+    \scriptsize
+    % \tablefontsize
+        \begin{tabular}{llcc}
+            \toprule
+            & & \multicolumn{1}{c}{{Diffusion Policy}} & \multicolumn{1}{c}{\textbf{Drifting Policy}} \\
+            \cmidrule(lr){3-3} \cmidrule(lr){4-4}
+            Task & Setting & \multicolumn{1}{c}{{NFE: 100}} & \multicolumn{1}{c}{\textbf{NFE: 1}} \\
+            \midrule
+            \multicolumn{4}{l}{\textit{\textbf{Single-Stage Tasks} (State \& Visual Observation)}} \\
+            \midrule
+            \multirow{2}{*}{Lift} & State & {0.98} & \textbf{1.00} \\
+             & Visual & {\textbf{1.00}} & \textbf{1.00} \\
+            \addlinespace[0.3em]
+            \multirow{2}{*}{Can} & State & {0.96} & \textbf{0.98} \\
+             & Visual & {0.97} & \textbf{0.99} \\
+            \addlinespace[0.3em]
+            \multirow{2}{*}{ToolHang} & State & {0.30} & \textbf{0.38} \\
+             & Visual & {\textbf{0.73}} & 0.67 \\
+            \addlinespace[0.3em]
+            \multirow{2}{*}{PushT} & State & {\textbf{0.91}} & 0.86 \\
+             & Visual & {0.84} & \textbf{0.86} \\
+
+            \midrule
+            \multicolumn{4}{l}{\textit{\textbf{Multi-Stage Tasks} (State Observation)}} \\
+            \midrule
+            \multirow{2}{*}{BlockPush} & Phase 1 & {0.36} & \textbf{0.56} \\
+             & Phase 2 & {0.11} & \textbf{0.16} \\
+            \addlinespace[0.3em]
+            \multirow{4}{*}{Kitchen} & Phase 1 & {\textbf{1.00}} & \textbf{1.00} \\
+             & Phase 2 & {\textbf{1.00}} & \textbf{1.00} \\
+             & Phase 3 & {\textbf{1.00}} & 0.99 \\
+             & Phase 4 & {\textbf{0.99}} & 0.96 \\
+            \bottomrule
+        \end{tabular}
+        \vspace{-0.5em}
+\end{table}
+% ##################################################
+
+\subsection{Experiments on Robotic Control}
+
+Beyond image generation, we further evaluate our method on robotics control. Our experiment designs and protocols follow \textit{Diffusion Policy} \citep{chi2025diffusion}. At the core of Diffusion Policy is a multi-step, diffusion-based generator; we replace it with our one-step Drifting Model.
+We directly compute drifting loss on the \textit{raw} representations for control, using no feature space. Results are in Table~\ref{tab:robotics_combined}.
+Our 1-NFE model matches or exceeds the state-of-the-art Diffusion Policy that uses 100 NFE.
+This comparison suggests that Drifting Models can serve as a promising generative model across different domains.
+
+
+
+\section{Discussion and Conclusion}
+
+We present \emph{Drifting Models}, a new paradigm for generative modeling.
+At the core of our model is the idea of modeling the evolution of pushforward distributions \textit{during training}.
+This allows us to focus on the update rule, \ie, $\x_{i+1} = \x_{i} + \Delta \x_i$, during the iterative training process.
+This is in contrast with diffusion-/flow-based models, which perform the iterative update at \textit{inference} time. Our method naturally performs one-step inference.
+
+Given that our methodology is substantially different, many open questions remain.
+For example, although we show that $q=p \Rightarrow \V=\mathbf{0}$, the converse implication does not generally hold in theory.
+While our designed $\V$ performs well empirically, it remains unclear under what conditions $\V\rightarrow\mathbf{0}$ leads to $q\rightarrow p$.
+
+From a practical standpoint, although our paper presents an effective instantiation of drifting modeling, many of our design decisions may remain sub-optimal. For example, the design of the drifting field and its kernels, the feature encoder, and the generator architecture remain open for future exploration.
+
+From a broader perspective, our work reframes iterative neural network training as a mechanism for distribution evolution, in contrast to the differential equations underlying diffusion-/flow-based models.
+We hope that this perspective will inspire the exploration of other realizations of this mechanism in future work.
+
+\vfill
+
+
+
+\section*{Acknowledgements}
+We greatly thank Google TPU Research Cloud (TRC) for granting us access to TPUs. We thank Michael Albergo, Ziqian Zhong, Zhengyang Geng, Hanhong Zhao, Jiangqi Dai, Alex Fan, and Shaurya Agrawal for helpful discussions. Mingyang Deng is partially supported by funding from MIT-IBM Watson AI Lab.
+
+\bibliography{references}
+\bibliographystyle{template_ICML_2026/icml2026}
+
+
+
+\clearpage
+\newpage
+\appendix
+\section{Additional Implementation Details}
+\label{sec:appendix_impl}
+
+\cref{tab:hypers_all} summarizes the configurations and hyper-parameters for ablation studies and system-level comparisons.
+We provide detailed experimental configurations for reproducibility. All ablation studies share a common default setup, while system-level comparisons use scaled-up configurations. More implementation details are described as follows.
+
+\begin{table*}[t]
+    \centering
+    \caption{\textbf{Configurations for ImageNet 256$\times$256}.
+    }
+    \vspace{.5em}
+    \label{tab:hypers_all}
+    \tablestyle{1pt}{1.0}
+    \scriptsize
+    \begin{tabular}{l |x{80}|x{80}x{80}|x{80}x{80}}
+    \toprule
+    & \textbf{ablation default} & \textbf{B/2, latent} (Table~\ref{tab:in256_latent}) & \textbf{L/2, latent} (Table~\ref{tab:in256_latent}) & \textbf{B/16, pixel} (Table~\ref{tab:in256_pixel}) & \textbf{L/16, pixel} (Table~\ref{tab:in256_pixel}) \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}
+    {\textit{\textbf{Generator Architecture}}} \\
+    arch & DiT-B/2 & DiT-B/2 & DiT-L/2 & DiT-B/16 & DiT-L/16 \\
+    input size & 32$\times$32$\times$4 & 32$\times$32$\times$4 & 32$\times$32$\times$4 & 32$\times$32$\times$4 & 32$\times$32$\times$4 \\
+    patch size & 2$\times$2 & 2$\times$2 & 2$\times$2 & 16$\times$16 & 16$\times$16 \\
+    hidden dim & 768 & 768 & 1024 & 768 & 1024 \\
+    depth & 12 & 12 & 24 & 12 & 24 \\
+    register tokens & 16 & 16 & 16 & 16 & 16 \\
+    style embedding tokens & 32 & 32 & 32 & 32 & 32 \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{\textbf{Feature Encoder for Drifting Loss}}} \\
+    arch & ResNet & ResNet & ResNet & ResNet + ConvNeXt-V2 & ResNet + ConvNeXt-V2 \\
+    SSL pre-train method & latent-MAE & latent-MAE & latent-MAE & pixel-MAE & pixel-MAE  \\
+    ResNet: input size & 32$\times$32$\times$4 & 32$\times$32$\times$4 &
+    32$\times$32$\times$4 &
+    256$\times$256$\times$3 &
+    256$\times$256$\times$3 \\
+    ResNet: conv$_\text{1}$ stride & 1 & 1 & 1 & 8 & 8 \\
+    ResNet: base width & 256 & 640 & 640 & 640 & 640 \\
+    ResNet: block type & \multicolumn{5}{c}{bottleneck} \\
+    ResNet: blocks / stage & \multicolumn{5}{c}{[3, 4, 6, 3]} \\
+    ResNet: size / stage & \multicolumn{5}{c}{[32$^2$, 16$^2$, 8$^2$, 4$^2$]} \\
+    MAE: masking ratio & \multicolumn{5}{c}{50\%} \\
+    MAE: pre-train epochs & 192 & 1280 & 1280 & 1280 & 1280 \\
+    classification finetune & No & 3k steps & 3k steps & 3k steps & 3k steps \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{\textbf{Generator Optimizer}}} \\
+    optimizer & \multicolumn{5}{c}{AdamW ($\beta_1$ = 0.9, $\beta_2$ = 0.95)} \\
+    learning rate & 2e-4 & 4e-4 & 4e-4 & 2e-4 & 4e-4 \\
+    weight decay & 0.01 & 0.0 & 0.01 & 0.01 & 0.01 \\
+    warmup steps & 5k & 10k & 10k & 10k & 10k \\
+    gradient clip & 2.0 & 2.0 & 2.0 & 2.0 & 2.0 \\
+    training steps & 30k & 200k & 200k & 100k & 100k \\
+    training epochs & 100 & 1280 & 1280 & 640 & 640 \\
+    EMA decay & 0.999 & \multicolumn{4}{c}{\{0.999, 0.9995, 0.9998, 0.9999\}}\\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{\textbf{Drifting Loss Computation}}} \\
+    class labels $N_\text{c}$ & 64 & 128 & 128 & 128 & 128 \\
+    positive samples $N_\text{pos}$ & 64 & 128 & 64 & 128 & 128 \\
+    generated samples $N_\text{neg}$ & 64 & 64 & 64 & 64 & 64 \\
+    effective batch $B$ ($N_\text{c}{\times}N_\text{neg}$) & 4096 & 8192 & 8192 & 8192 & 8192 \\
+    temperatures $\tau$ & \multicolumn{5}{c}{\{0.02, 0.05, 0.2\}: one loss per $\tau$, sum all loss terms} \\
+    \midrule
+    \rowcolor[gray]{0.9} \multicolumn{6}{l}{\textit{\textbf{CFG Configuration}}} \\
+    train: CFG $\alpha$ range & $[1, 4]$ & $[1, 4]$ & $[1, 4]$ & $[1, 4]$ & $[1, 4]$ \\
+    train: CFG $\alpha$ sampling & $p(\alpha){\propto}\alpha^{-3}$ & $p(\alpha) \propto \alpha^{-5}$ & \tiny 50\%: $\alpha{=}1$, 50\%: $p(\alpha){\propto} \alpha^{-3}$ & $p(\alpha) \propto \alpha^{-5}$ & $p(\alpha) \propto \alpha^{-5}$ \\
+    train: uncond samples $N_\text{uncond}$ & 16 & 32 & 32 & 32 & 32 \\
+    inference: CFG $\alpha$ search & \multicolumn{5}{c}{[1.0, 3.5]} \\
+    \bottomrule
+    \end{tabular}
+\end{table*}
+
+\subsection{Pseudo-code for Computing Drifting Field $\V$}
+\label{sec:appendix_compute_V}
+
+Alg.~\ref{alg:drift_code} provides the pseudo-code for computing $\V$. The computation is based on taking empirical means in Eq.~(\ref{eq:VZZ}) and (\ref{eq:kernel}), which are implemented as softmax over $\y$-sample axis. In practice, we further normalize over the $\x$-sample axis, also implemented as softmax on the same logit matrix.
+We ablate its influence in \ref{sec:appendix_kernel_normalizatio}.
+
+\renewcommand{\yn}{\y^{-}}
+\renewcommand{\yp}{\y^{+}}
+\newcommand{\B}{\mathcal{B}}
+
+It is worth noting that this implementation preserves the desired property of $\V$.
+In principle, this implementation can be viewed as a Monte Carlo estimation of a drifting field:
+\begin{equation}
+\V_{p,q}(\x)=\mathbb E_{\B,p,q}[\tilde K_\B(\x, \yp)\tilde K_\B(\x, \yn)(\yp-\yn)],
+\end{equation}
+where $\B$ consists of other samples in the batch and $\tilde K_\B$ denote normalizing the distance based on statistics within $\B$. This $\V$ also satisfies $\V_{p,p}(\x)=\mathbf 0$, since when $p=q$, the term  $\tilde K_\B(\yp, x)\tilde K_\B(\yn,x)(\yp-\yn)$ cancels out with the term $\tilde K_\B(\yn, x)\tilde K_\B(\yp,x)(\yn-\yp)$.
+
+\begin{algorithm}[t]
+\caption{Computing the drifting field $\V$.}
+\label{alg:drift_code}
+\begin{lstlisting}
+def compute_V(x, y_pos, y_neg, T):
+  # x: [N, D]
+  # y_pos: [N_pos, D]
+  # y_neg: [N_neg, D]
+  # T: temperature
+
+  # compute pairwise distance
+  dist_pos = cdist(x, y_pos)  # [N, N_pos]
+  dist_neg = cdist(x, y_neg)  # [N, N_neg]
+
+  # ignore self (if y_neg is x)
+  dist_neg += eye(N) * 1e6
+
+  # compute logits
+  logit_pos = -dist_pos / T
+  logit_neg = -dist_neg / T
+
+  # concat for normalization
+  logit = cat([logit_pos, logit_neg], dim=1)
+  # normalize along both dimensions
+  A_row = logit.softmax(dim=-1)
+  A_col = logit.softmax(dim=-2)
+  A = sqrt(A_row * A_col)
+
+  # back to [N, N_pos] and [N, N_neg]
+  A_pos, A_neg = split(A, [N_pos,], dim=1)
+
+  # compute the weights
+  W_pos = A_pos  # [N, N_pos]
+  W_neg = A_neg  # [N, N_neg]
+  W_pos *= A_neg.sum(dim=1,keepdim=True)
+  W_neg *= A_pos.sum(dim=1,keepdim=True)
+
+  drift_pos = W_pos @ y_pos # [N_x, D]
+  drift_neg = W_neg @ y_neg # [N_x, D]
+
+  V = drift_pos - drift_neg
+  return V
+\end{lstlisting}
+\end{algorithm}
+
+
+\subsection{Generator Architecture}
+\label{sec:appendix_generator}
+
+\paragraph{Input and output.}
+The input to the generator consists of random noise along with conditioning:
+\[
+f_\theta: (\e, c, \alpha) \mapsto \x
+\]
+where $\e$ denotes random variables, $c$ is a class label, and $\alpha$ is the CFG strength.
+$\e$ may consist of both continuous random variables (\eg, Gaussian noise) and discrete ones (\eg, uniformly distributed integers; see random style embeddings).
+For latent-space models, the output $\mathbf{x} \in \mathbb{R}^{32\times 32\times 4}$ is in the SD-VAE latent space.
+For pixel-space models, the output $\mathbf{x} \in \mathbb{R}^{256\times 256\times 3}$ is directly an image.
+
+\paragraph{Transformer.}
+We adopt a DiT-style Transformer~\citep{peebles2023scalable}. Following~\citep{yao2025reconstruction}, we use SwiGLU~\citep{shazeer2020glu}, RoPE~\citep{su2024roformer}, RMSNorm~\citep{zhang2019root}, and QK-Norm~\citep{henry2020query}.
+The input Gaussian noise is patchified into 256$=$16$\times$16 tokens (patch size 2$\times$2 for latent, 16$\times$16 for pixel).
+Conditioning $(c, \alpha)$ is processed by adaLN, as well as by in-context conditioning tokens.
+The output tokens are unpatchified back to the target shape.
+
+\paragraph{In-context tokens.}
+Following~\cite{li2025back}, we prepend 16 learnable tokens to the sequence for in-context conditioning \cite{peebles2023scalable}.
+These tokens are formed by summing the projected conditioning vector with positional embeddings.
+\paragraph{Random style embeddings.}
+Our framework allows arbitrary noise distributions beyond Gaussians.
+Inspired by StyleGAN~\cite{sauer2022stylegan}, we introduce an additional 32 ``style tokens'': each of which is a random index into a codebook of 64 learnable embeddings.
+These are summed and added to the conditioning vector.
+This does not change the sequence length and introduces negligible overhead in terms of parameters and FLOPs. This table reports the effect of style embeddings on our ablation default:
+
+\begin{center}
+\tablestyle{6pt}{1.02}
+\tablefontsize
+\begin{tabular}{c|cc}
+\toprule
+ & w/o style & w/ style \\
+\midrule
+FID & 8.86 & \textbf{8.46} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In contrast to diffusion-/flow-based methods, our method can naturally handle different types of noise or random variables.
+With random style embeddings, the input random variables consist of two parts: (1) Gaussian noise, and (2) discrete indices for style embeddings. Our model $f$ produces the pushforward distribution of their joint distribution.
+
+%============================================================
+% MAE Implementation
+%============================================================
+\subsection{Implementation of ResNet-style MAE}
+\label{sec:appendix_latent_mae}
+
+In addition to standard self-supervised learning models (MoCo \cite{he2020momentum}, SimCLR\cite{chen2020simple}), we develop a customized ResNet-style MAE model as the feature encoder for drifting loss.
+
+\paragraph{Overview.}
+Unlike standard MAE \cite{he2022masked}, which is based on ViT \cite{Dosovitskiy2021}, our MAE trains a convolutional ResNet that provides multi-scale features.
+For latent-space models, the input and output have dimension 32$\times$32$\times$4;
+for pixel-space models, the input and output have dimension 256$\times$256$\times$3.
+
+Our MAE consists of a ResNet-style encoder paired with a deconvolutional decoder in a U-Net-style \cite{ronneberger2015u} encoder-decoder architecture.
+We only use the ResNet-style encoder for feature extraction when computing the drifting loss.
+
+\paragraph{MAE Encoder.}
+The encoder follows a classical ResNet \cite{he2016deep} design.
+It maps an input to multi-scale feature maps (4 scales in ResNet):
+\[
+\text{Encoder}: \mathbf{x} \mapsto \{\mathbf{f}_1, \mathbf{f}_2, \mathbf{f}_3, \mathbf{f}_4\}
+\]
+Here, a feature map $\mathbf{f}_i$ has dimension $H_i{\times}W_i{\times}C_i$, with $H_i{\times}W_i \in \{32^2, 16^2, 8^2, 4^2\}$ and $C_i \in \{C, 2C, 4C, 8C\}$ for a base width $C$.
+
+The architecture follows standard ResNet~\citep{he2016deep} design, with GroupNorm (GN)~\citep{wu2018group} used in place of BatchNorm (BN)~\citep{ioffe2015batch}.
+All residual blocks are ``basic'' blocks (\ie, each consisting of two $3{\times}3$ convolutions).
+Following the standard ResNet-34 \citep{he2016deep}:
+the encoder has a 3${\times}$3 convolution (without downsampling) and 4 stages with $[3, 4, 6, 3]$ blocks; downsampling (stride 2) happens at the first block of stages 2 to 4.
+
+For latent-space (\ie, latent-MAE), the input of this ResNet is 32$\times$32$\times$4; for pixel-space, the 256$\times$256$\times$3 input is first patchified (by a 8$\times$8 patch) into 32$\times$32$\times$192. The ResNet operates on the input with $H{\times}W$ $=$ 32$\times$32.
+
+\paragraph{MAE Decoder.}
+The decoder returns to the input shape via deconvolutions and skip connections:
+\[
+\text{Decoder}: \{\mathbf{f}_4, \mathbf{f}_3, \mathbf{f}_2, \mathbf{f}_1\} \mapsto \hat{\mathbf{x}}.
+\]
+
+It starts with a $3{\times}3$ convolutional block on $\mathbf{f}_4$, followed by 4 upsampling blocks.
+Each upsampling block performs: bilinear 2${\times}$2 upsampling $\to$ concatenating with encoder's skip connection $\to$ GN $\to$ two $3{\times}3$ convolutions with GN and ReLU.
+A final 1${\times}$1 convolution produces the output channels. For the pixel-space, the decoder unpatchifies back to the original resolution after the last layer.
+
+\paragraph{Masking.}
+The MAE is trained to reconstruct randomly masked inputs.
+Unlike the ViT-based MAE~\citep{he2022masked}, which removes the masked tokens from the sequence, we simply zero out masked patches.
+For the input of a shape $H{\times}W$ $=$ 32$\times$32 (in either the latent- or pixel-based case), we mask 2${\times}$2 patches by zeroing.
+Each patch is independently masked with 50\% probability.
+
+\paragraph{MAE training.}
+We minimize the $\ell_2$ reconstruction loss on the masked regions.
+We use AdamW \cite{Loshchilov2019} with learning rate $4{\times}10^{-3}$ and a batch size of 8192. EMA with decay 0.9995 is used.
+Following \cite{he2022masked}, we apply random resized crop augmentation to the input (for the latent setting, images are augmented before being passed through the VAE encoder).
+
+\paragraph{Classification fine-tuning.}
+For our best feature encoder (last row of Table~\ref{tab:ablation_drift_space}), we fine-tune the MAE model with a linear classifier head.
+The loss is $\lambda \mathcal{L}_{\text{cls}} + (1-\lambda)\mathcal{L}_{\text{recon}}$. We fine-tune all parameters in this MAE for 3k iterations, where $\lambda$ follows a linear warmup schedule, increasing from $0$ to $0.1$ over the first 1k iterations and remaining constant at $0.1$ for the rest of the training.
+
+
+%============================================================
+% Other Feature Encoders
+%============================================================
+\subsection{Other Pretrained Feature Encoders}
+\label{sec:appendix_other_encoders}
+
+In addition to our customized MAE, we also evaluate other feature encoders for computing the drifting loss.
+
+\paragraph{MoCo and SimCLR.} We evaluate publicly available self-supervised encoders trained on ImageNet in pixel space: MoCo \cite{he2020momentum,chen2020improved} SimCLR \cite{chen2020simple}. We use the ResNet-50 variant.
+For latent-space generation, we apply the VAE decoder to map generator outputs from latent space (32${\times}$32${\times}$4) to pixel space (256${\times}$256${\times}$3) before feature extraction.
+Gradients are backpropagated through both the feature extractor and the VAE decoder.
+
+\paragraph{MAE with ConvNeXt-V2.} In our pixel-space generator, we also investigate ConvNeXt-V2 \citep{woo2023convnext} as the feature encoder. We note that ConvNeXt-V2 is a self-supervised pre-trained model using the MAE objective, followed by classification fine-tuning. Like ResNet, ConvNeXt-V2 is a multi-stage architecture.
+
+%============================================================
+% Feature Extraction Details
+%============================================================
+\subsection{Multi-scale Features for Drifting Loss}
+\label{sec:appendix_feature_extraction}
+
+Given an image, the feature encoder produces feature maps at multiple scales, with multiple spatial locations per scale.
+We compute one drifting loss per feature (\eg, per scale and/or per location).
+Specifically, we compute the kernel, the drift, and the resulting loss independently for each feature. The resulting losses are summed.
+
+For each stage in a ResNet, we extract features from the output of every 2 residual blocks, together with the final output.
+This yields a set of feature maps, each of shape $H_i{\times}W_i{\times}C_i$. For each feature map, we produce:
+\begin{enumerate}[itemsep=2pt, topsep=2pt, parsep=4pt, partopsep=4pt,label=(\alph*)]
+    \item $H_i{\times}W_i$ vectors, one per location (each $C_i$-dim);
+    \item 1 global mean and 1 global std (each $C_i$-dim);
+    \item $\frac{H_i}{2}{\times}\frac{W_i}{2}$ vectors of means and $\frac{H_i}{2}{\times}\frac{W_i}{2}$ vectors of stds (each $C_i$-dim), computed over 2${\times}$2 patches;
+    \item $\frac{H_i}{4}{\times}\frac{W_i}{4}$ vectors of means and $\frac{H_i}{4}{\times}\frac{W_i}{4}$ vectors of stds (each $C_i$-dim), computed over 4${\times}$4 patches.
+\end{enumerate}
+In addition, for the encoder's input ($H_0{\times}W_0{\times}C_0$), we compute the mean of squared values ($x^2$) per channel and obtain a $C_0$-dim vector.
+
+All resulting vectors here are $C_i$-dim.
+We compute one drifting loss for each of these $C_i$-dim vectors. All these losses, in addition to the vanilla drifting loss without $\phi$, are summed.
+This table compares the effect of these designs on our ablation default:
+\begin{center}
+\tablestyle{6pt}{1.02}
+\tablefontsize
+\begin{tabular}{c|ccc}
+\toprule
+ & (a,b) & (a-c) & (a-d) \\
+\midrule
+FID & 9.58 & 9.10 & \textbf{8.46} \\
+\bottomrule
+\end{tabular}
+\end{center}
+This shows that our method benefits from richer feature sets.
+We note that once the feature encoder is run, the computational cost of our drifting loss is negligible: computing multi-scale, multi-location losses incurs little overhead compared to computing a single loss.
+
+
+\subsection{Feature and Drift Normalization}
+\label{sec:appendix_feature_and_loss_normalization}
+
+To balance the multiple loss terms from multiple features, we perform normalization for each feature $\phi_j$, where, $\phi_j$ denotes a feature at a specific spatial location within a given scale (see \ref{sec:appendix_feature_extraction}).
+Intuitively, we want to perform normalization such that the kernel $k(\cdot, \cdot)$ and the drift $\V$ are insensitive to the absolute magnitude of features.
+This allows our model to robustly support different feature encoders (see Table~\ref{tab:ablation_drift_space}) as well as a rich set of features from one encoder.
+
+\paragraph{Feature Normalization.} Consider a feature $\phi_j \in \mathbb{R}^{C_j}$. We define a normalization scale $S_j \in \mathbb{R}^{1}$ and the normalized feature is denoted by:
+\begin{equation}
+\tilde{\phi}_j := {\phi}_j / S_j.
+\end{equation}
+When using $\tilde{\phi}_j$, the $\ell_2$ distance computed in Eq.~(\ref{eq:kernel}) is:
+\begin{equation}
+dist_j(\x, \y) = \|\tilde{\phi}_j(\x) - \tilde{\phi}_j(\y)\|,
+\end{equation}
+where $\x$ denotes a generated sample and $\y$ denotes a positive/negative sample, and $\tilde{\phi}_j(\cdot)$ means extracting their feature at $j$. We want the \textit{average} distance to be $\sqrt{C_j}$:
+\begin{equation}
+\mathrm{E}_\x \mathrm{E}_\y [ dist_j(\x, \y)] \approx \sqrt{C_j}.
+\end{equation}
+To achieve this, we set the normalization scale $S_j$ as:
+\begin{equation}
+S_j = \frac{1}{\sqrt{C_j}} \mathrm{E}_\x \mathrm{E}_\y [ \|{\phi}_j(\x) - {\phi}_j(\y)\| ]
+\end{equation}
+In practice, we use all $\x$ and $\y$ samples in a batch to compute the empirical mean in place of the expectation. We reuse the \texttt{cdist} computation in Alg.~\ref{alg:drift_code} for computing the pairwise distances. We apply stop-gradient to $S_j$, because this scalar is conceptually computed from samples from the previous batch.
+
+With the normalized feature, the kernel in Eq.~(\ref{eq:kernel}) is set as:
+\begin{equation}
+k(\x, \y) = \exp\left(-\frac{1}{\tilde{\tau_j}} \|\tilde{\phi}_j(\x) - \tilde{\phi}_j(\y)\|\right),
+\end{equation}
+where $\tilde{\tau_j}:=\tau{\cdot}\sqrt{C_j}$. By doing so, the value of temperature $\tau$ does not depend on the feature magnitude or feature dimensionality. We set $\tau \in$ \{0.02, 0.05, 0.2\} (discussed next).
+
+\paragraph{Drift Normalization.} When using the feature $\phi_j$, the resulting drift is in the same feature space as $\phi_j$, denoted as $\V_j$. We perform a drift normalization on $\V_j$, for each feature $\phi_j$. Formally, we define a normalization scale $\lambda_j \in \mathbb{R}^1$ and denote:
+\begin{equation}
+\tilde{\V}_j:=\V_j / \lambda_j.
+\end{equation}
+Again, we want the normalized drift to be insensitive to the feature magnitude:
+\begin{equation}
+\mathbb{E} \left[ \frac{1}{C_j}\| \tilde{\V}_j \|^2 \right] \approx 1.
+\end{equation}
+To achieve this, we set $\lambda_j$ as:
+\begin{equation}
+\label{eq:lambda}
+\lambda_j = \sqrt{\mathbb{E} \left[ \frac{1}{C_j} \| \V_j \|^2 \right]}.
+\end{equation}
+In practice, the expectation is replaced with the empirical mean computed over the entire batch.
+
+With the normalized feature and normalized drift, the drifting loss of the feature $\phi_j$ is:
+\begin{equation}
+\label{eq:mse_loss_j}
+\mathcal{L}_j = \text{MSE}(\tilde\phi_j({\x}) -  \texttt{sg}(\tilde\phi_j({\x}) + \tilde{\V}_j)),
+\end{equation}
+where MSE denotes mean squared error.
+The overall loss is the sum across all features:
+$\mathcal{L} = \sum_j {\mathcal{L}_j}$.
+
+\paragraph{Multiple temperatures.}
+Using normalized feature distances, the value of temperature $\tau$ determines \textit{what is considered ``nearby''}.
+To improve robustness across different features and across different pretrained models we study, we adopt multiple temperatures.
+
+Formally, for each $\tau$ value, we compute the normalized drift as described above, denoted by $\tilde{\V}_{j,\tau}$. Then we compute an aggregated field: $\tilde{\V}_j \leftarrow \sum_\tau \tilde{\V}_{j,\tau}$, and use it for the loss in \cref{eq:mse_loss_j}.
+
+% and renormalize it in the same way as Eq.~(\ref{eq:lambda}):
+% $\hat{\V}_j \leftarrow \hat{\V}_j / \hat{\lambda}_j$.
+% This $\hat{\V}_j$ is used in place of $\tilde{\V}_j$ in ().
+
+This table shows the effect of multiple temperatures on our ablation default:
+\begin{center}
+    \tablestyle{4pt}{1.05}
+    \tablefontsize
+    \begin{tabular}{l | x{32} x{32} x{32} | c}
+    \toprule
+    $\tau$ & 0.02 & 0.05 & 0.2 & \{0.02, 0.05, 0.2\} \\
+    \midrule
+    FID & 10.62 & \textbf{8.67} & 8.96 & \textbf{8.46} \\
+    \bottomrule
+    \end{tabular}
+\end{center}
+Using multiple temperatures can achieve slightly better results than using a single optimal temperature. We fix $\tau \in $ \{0.02, 0.05, 0.2\} and do not require tuning this hyperparameter across different configurations.
+
+
+\paragraph{Normalization across spatial locations.}
+For a feature map of resolution $H_i{\times}W_i$, there are $H_i{\times}W_i$ per-location features.
+Separately computing the normalization for each location would be slow and unnecessary.
+We assume that features at different locations within the same feature map share the same normalization scale. Accordingly, we concatenate all $H_i{\times}W_i$ locations and compute the normalization scale over all of them.
+The feature normalization and drift normalization are both performed in this way.
+
+
+\subsection{Classifier-Free Guidance (CFG)}
+\label{sec:appendix_cfg}
+
+To support CFG, at training time, we include $N_\text{unc}$ additional \mbox{unconditional} samples (real images from random classes) as extra negatives.
+These samples are weighted by a factor $w$ when computing the kernel.
+For a generated sample $\x$, the effective negative distribution it compares with is:
+\[
+\tilde{q}(\cdot|c) \triangleq \frac{(N_\text{neg}{-}1) \cdot q_\theta(\cdot|c) + N_\text{unc}  w \cdot p_{\text{data}}(\cdot|\varnothing)}{(N_\text{neg}{-}1) + N_\text{unc} w}.
+\]
+Comparing this equation with Eq.~(\ref{eq:cfg1})(\ref{eq:cfg2}), we have:
+\[
+\gamma = \frac{N_\text{unc} w}{(N_\text{neg}{-}1) + N_\text{unc} w}
+\]
+and
+\[
+\alpha = \frac{1}{1-\gamma} = \frac{(N_\text{neg}{-}1) + N_\text{unc} w}{N_\text{neg}{-}1}.
+\]
+Given a CFG strength $\alpha$, we compute $w$ accordingly, which is used to weight the kernel.
+The same weighting $w$ is also applied when computing the global distance normalization.
+
+We train our model with CFG-conditioning \cite{geng2025improved}. At each iteration, we randomly sample $\alpha$ following a pre-defined distribution (see Table~\ref{tab:hypers_all}) and compute the resulting $w$ for weighting the unconditional samples. The value of $\alpha$ is a condition input to the network $f_\theta(\e, c, \alpha)$, alongside the class label $c$.
+
+At inference time, we specify a value of $\alpha$. The inference-time computation remains to be one-step (1-NFE).
+
+\subsection{Sample Queue}
+\label{sec:appendix_sample_queue}
+
+Our method requires access to randomly sampled \textit{real} (positive/unconditional) data. This can be implemented using a specialized data loader.
+Instead, we adopt a \textit{sample queue} of cached data, similar to the queue used in MoCo \cite{he2020momentum}.
+This implementation samples data in a statistically similar way to a specialized data loader.
+For completeness, we describe our implementation as follows, while noting that a data loader would be a more principled solution.
+
+For each class label, we keep a queue of size 128; for unconditional samples (used in CFG), we maintain a separate global queue of size 1000.
+At each training step, we push the latest 64 new real (positive/unconditional) samples, alongside their labels, into the corresponding queues; the earliest ones are dequeued.
+When sampling, positive samples are drawn from the queue of the corresponding class, and unconditional samples are drawn from the global queue.
+We sample without replacement.
+
+\subsection{Training Loop}
+\label{sec:appendix_training_loop}
+
+In summary, in the training loop, each step proceeds as:
+\begin{enumerate}[itemsep=2pt, topsep=2pt, parsep=2pt, partopsep=2pt]
+    \item Sample a batch ($N_c$) of class labels.
+    \item For each label $c$, sample a CFG scale $\alpha$.
+    \item Sample a batch ($N_\text{neg}$) of noise $\e$. Feed $(\e, c, \alpha)$ to the generator $f$ to produce generated samples;
+    \item Sample positive samples (same class, $N_\text{pos}$) and unconditional samples (for CFG, $N_\text{unc}$);
+    \item Extract features on all generated, positive, and unconditional samples
+    \item Compute the drifting loss using the features.
+    \item Run backpropagation and parameter update.
+\end{enumerate}
+
+
+\section{Additional Experimental Results}
+
+% ###################################
+\begin{table}[t]
+    \centering
+    \caption{\textbf{Ablations on pixel-space generation.}
+    We study generation directly in pixel space (without VAE). Applying the same MAE recipe as in latent space yields higher FID, indicating that pixel-space generation is more challenging. Combining MAE with ConvNeXt-V2 helps close this gap. Latent-space results shown for reference. The results below follow the ablation setting (B/16 model for pixel-space, 100 epochs).
+    }
+    \label{tab:ablation_latent_vs_pixel}
+    % \vspace{.5em}
+    \tablestyle{6pt}{1.05}
+    \tablefontsize
+    \begin{tabular}{l r r}
+    \toprule
+    & \multicolumn{2}{c}{FID (100-epoch)} \\
+    \cmidrule{2-3}
+    feature encoder $\phi$ & latent (B/2) & pixel (B/16) \\
+    \midrule
+    MAE (width 256, epoch 192) & \cg 8.46 & 32.11 \\
+    MAE (width 640, epoch 1280) + cls ft. & \cg 3.36 & 9.35 \\
+    ~+ MAE w/ ConvNeXt-V2 & \cg - & \textbf{3.70} \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+% ###################################
+
+% ###################################
+\begin{table}[t]
+    \centering
+    \caption{\textbf{Pixel-space generation: from ablation to final setting.} Beyond the ablation setting, we compare the settings that lead to the results in Table~\ref{tab:in256_pixel}.
+    }
+    % \vspace{.5em}
+\label{tab:ablation_final_pixel}
+    \tablestyle{6pt}{1.05}
+    \tablefontsize
+    \begin{tabular}{l |l r| c}
+    \toprule
+    case & arch & ep & FID \\
+    \midrule
+    (a) baseline (from Table~\ref{tab:ablation_latent_vs_pixel}) & B/16 & 100 & 3.70 \\
+    \midrule
+    (b) longer + hyper-param. & B/16 & 320 & 2.19 \\
+    (c) longer & B/16 & 640 & 1.76 \\
+    (d) larger model & L/16  & 640 & \textbf{1.61} \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+% ###################################
+
+
+% Allow floats to take up more of a page
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.9}
+
+% ======================================
+\begin{table}[t]
+    \centering
+    \caption{\textbf{Ablation on kernel normalization.}
+    Softmax normalization over both the $\x$ and $\y$ axes performs better. On the other hand, even using no normalization performs decently, showing the robustness of our method.
+    (Setting: B/2 model, 100 epochs)
+    }
+    \label{tab:kernel_normalization}
+    % \vspace{.5em}
+    \tablestyle{6pt}{1.0}
+    \tablefontsize
+    \begin{tabular}{l r}
+    \toprule
+    kernel normalization & FID \\
+    \midrule
+    softmax over $\x$ and $\y$ (default) & \textbf{8.46} \\
+    softmax over $\y$ & 8.92 \\
+    no normalization & 10.54 \\
+    \bottomrule
+    \end{tabular}
+    \vspace{-.5em}
+\end{table}
+% ======================================
+
+\subsection{Ablations on Pixel-Space Generation}
+\label{section:exp_pixel_space}
+
+We provide more ablations on pixel-space generation in Table~\ref{tab:ablation_latent_vs_pixel} and \ref{tab:ablation_final_pixel}.
+Table~\ref{tab:ablation_latent_vs_pixel} compares the effect of the feature encoder on the pixel-space generator.
+It shows that the choice of feature encoder plays a more significant role in pixel-space generation quality.
+A weaker MAE encoder yields an FID of 32.11, whereas a stronger MAE encoder improves performance to an FID of 9.35.
+We further add another feature encoder, ConvNeXt-V2 \cite{woo2023convnext}, which is also pre-trained with the MAE objective. This further improves the result to an FID of 3.70.
+
+Table~\ref{tab:ablation_final_pixel} reports the results of training longer and using a larger model. Due to limited time, we train pixel-space models for 640 epochs (\vs~the latent counterpart's 1280); we expect that longer training would yield further improvements.
+We achieve an FID of 1.61 for pixel-space generation. This is our result in the main paper (Table~\ref{tab:in256_pixel}).
+
+% ###################################
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.65\linewidth]{figures/cfg_tradeoff_combined.png}
+    \vspace{-.75em}
+    \caption{\textbf{Effect of CFG scale $\alpha$.}
+    \textbf{(a)}: FID vs.~$\alpha$.
+    \textbf{(b)}: IS vs.~$\alpha$.
+    \textbf{(c)}: IS vs.~FID.
+    We show the L/2 (solid) and B/2 (dashed) models.
+    Consistent with common observations in diffusion-/flow-based models, the CFG scale effectively trades off distributional coverage (as reflected by FID) against per-image quality (measured by IS).
+    Notably, with the L/2 model, the optimal FID is achieved at $\alpha{=}1.0$, which is often regarded as ``w/o CFG'' in diffusion-/flow-based models. For B/2, the optimal FID is achieved at $\alpha{=}1.1$.
+    }
+    \label{fig:cfg_tradeoff}
+    \vspace{-1.5em}
+\end{figure}
+% ###################################
+
+
+\subsection{Ablation on Kernel Normalization}
+\label{sec:appendix_kernel_normalizatio}
+
+In Eq.~(\ref{eq:VZZ}), our drifting field is weighted by normalized kernels, which can be written as:
+\begin{equation}
+\V(\x) = \mathbb E_{p,q} [\tilde{k}(\x, \yp) \tilde{k}(\x, \yn) (\yp - \yn)],
+\end{equation}
+where $\tilde{k}(\cdot, \cdot)=\frac{1}{Z}k(\cdot, \cdot)$ denotes the normalized kernel.
+In principle, this normalization is approximated by a softmax operation over the axis of $\y$ samples. Our implementation (Alg.~\ref{alg:drift_code}) further applies softmax over the axis of $\x$ samples. We compare these designs, along with another variant without normalization ($Z=1$).
+
+Table~\ref{tab:kernel_normalization} compares the three designs. Using the $\y$-only softmax performs well (8.92 FID), whereas using both $\x$ and $\y$ softmax improves the result (8.46 FID). On the other hand, even without normalization, performance remains decent, demonstrating the robustness of our method.
+
+We note that all three variants satisfy the equilibrium condition $\V_{p,q}(\x) = \mathbf{0}$ when $p=q$. This explains why all variants perform reasonably well and why even the destructive setting (no normalization) avoids catastrophic failure.
+
+\subsection{Ablation on CFG}
+\label{section:exp_cfg}
+
+In \cref{fig:cfg_tradeoff}, we investigate the CFG scale $\alpha$ used at inference time.
+It shows that the CFG formulation developed for our models exhibits behavior similar to that observed in diffusion-/flow-based models.
+Increasing the CFG scale leads to higher IS values, whereas beyond the FID sweet spot, further increases in IS come at the cost of worse FID.
+
+Notably, with our best model (L/2), the optimal FID is achieved at $\alpha{=}1.0$, which is often regarded as ``w/o CFG'' in diffusion-/flow-based models (even though their ``w/o CFG'' setting can reduce NFE by half).
+While our method need not run an unconditional model at inference time (in contrast to standard CFG), training is influenced by the use of unconditional real samples as negatives.
+
+% ###################################
+\begin{figure}[t]
+    \centering
+    % Header row
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \makebox[0.28\linewidth]{\hspace{1pt}\scriptsize \textbf{\textcolor{orange}{Generated}}}%
+        \makebox[0.72\linewidth]{\scriptsize \textbf{\textcolor{blue}{Retrieved}}}
+    \end{minipage}
+    \hfill
+    \begin{minipage}{0.49\linewidth}
+        \centering
+        \makebox[0.28\linewidth]{\hspace{5pt}\scriptsize \textbf{\textcolor{orange}{Generated}}}%
+        \makebox[0.72\linewidth]{\hspace{5pt}\scriptsize \textbf{\textcolor{blue}{Retrieved}}}
+    \end{minipage}
+    \vspace{1pt}
+
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_0004_class002_sim0.945.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_0025_class012_sim0.918.jpg}\\[1pt]
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_0027_class013_sim0.902.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_0050_class025_sim0.899.jpg}\\[1pt]
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_0554_class277_sim0.919.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1451_class725_sim0.866.jpg}\\[1pt]
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1559_class779_sim0.936.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1822_class911_sim0.915.jpg}\\[1pt]
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1861_class930_sim0.862.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1889_class944_sim0.895.jpg}\\[1pt]
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1893_class946_sim0.906.jpg}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/samples/nn_new/nn_vis_1938_class969_sim0.896.jpg}
+    \caption{\textbf{Nearest neighbor analysis.} Each panel shows a \textcolor{orange}{{generated sample}} together with its top-10 nearest \textcolor{blue}{real images}. The nearest neighbors are retrieved from the ImageNet training set based on the cosine similarity using a CLIP encoder \cite{radford2021learning}.
+    Our method generates novel images that are visually distinct from their nearest neighbors.}
+    \label{fig:nearest_neighbors}
+    \vspace{-1.5em}
+\end{figure}
+% ###################################
+
+\subsection{Nearest Neighbor Analysis}
+
+In \cref{fig:nearest_neighbors}, we show generated images together with their nearest real images. The nearest neighbors are retrieved from the ImageNet training set using CLIP features.
+These visualizations suggest that our method generates novel images that are visually distinct from their nearest neighbors, rather than merely memorizing training samples.
+
+\subsection{Qualitative Results}
+\label{sec:appendix_qualitative_results}
+
+Fig.~\ref{fig:latent_uncurated_samples_1}-\ref{fig:latent_uncurated_samples_4} show uncurated samples from our model.
+Fig.~\ref{fig:comparison_imf_1}-\ref{fig:comparison_imf_5} provide side-by-side comparison with improved MeanFlow (iMF) \cite{geng2025improved}, the current state-of-the-art one-step method.
+
+% !TeX root = ../main.tex
+\section{Additional Derivations}
+
+\subsection{On Identifiability of the Zero-Drift Equilibrium}
+\label{sec:theory_identifiability}
+
+% \paragraph{Problem statement.}
+In Sec.~\ref{sec:methodology}, we showed that anti-symmetry implies $p=q \Rightarrow \V(\x)\equiv \mathbf{0}$.
+Here we investigate the converse: under what conditions does $\V(\x)\approx \mathbf{0}$ imply $p\approx q$?
+Generally, this is not guaranteed for arbitrary vector fields.
+However, we argue that for our specific construction, the zero-drift condition imposes strong constraints on the distributions.
+
+% \paragraph{Full-support assumption.}
+To avoid boundary issues, we assume that $p$ and $q$ have full support on $\mathbb{R}^d$ (e.g., via infinitesimal Gaussian smoothing).
+Consequently, ensuring the equilibrium condition $\V(\x) \approx \mathbf{0}$ for generated samples $\x \sim q$ effectively enforces $\V(\x) \approx \mathbf{0}$ for all $\x \in \mathbb{R}^d$.
+
+\paragraph{Setup.}
+Consider a general interaction kernel $K(\mathbf{x},\mathbf{y}^+,\mathbf{y}^-) \in \mathbb{R}^d$ and the drifting field
+\begin{equation}
+\mathbf{V}_{p,q}(\mathbf{x}) := \mathbb{E}_{\mathbf{y}^+\sim p,\ \mathbf{y}^-\sim q} \big[ K(\mathbf{x},\mathbf{y}^+,\mathbf{y}^-) \big].
+\label{eq:V_general_K}
+\end{equation}
+We assume that $p$ and $q$ belong to a finite-dimensional model class spanned by a linearly independent basis $\{\varphi_i\}_{i=1}^m$:
+\begin{equation}
+p(\mathbf{y})=\sum_{i=1}^m a_i\,\varphi_i(\mathbf{y}),\qquad
+q(\mathbf{y})=\sum_{i=1}^m b_i\,\varphi_i(\mathbf{y}),
+\label{eq:pq_basis}
+\end{equation}
+where $\mathbf{a},\mathbf{b}\in\mathbb{R}^m$ are coefficient vectors.
+
+\paragraph{Bilinear expansion over test locations.}
+Consider a set of test locations (probes) $\mathcal{X} = \{\mathbf{x}_k\}_{k=1}^N$ with sufficiently large $N$ (e.g., $N \gg m^2$).
+For each pair of basis indices $(i,j)$, we define the \emph{induced interaction vector} $\mathbf{U}_{ij} \in \mathbb{R}^{d{\times}N}$ by computing its column:
+\begin{equation}
+\mathbf{U}_{ij}[:, \mathbf{x}] \triangleq \iint K(\mathbf{x},\mathbf{y}^+,\mathbf{y}^-)\, \varphi_i(\mathbf{y}^+)\,\varphi_j(\mathbf{y}^-)\,d\mathbf{y}^+d\mathbf{y}^-
+\end{equation}
+evaluated at all $\mathbf{x} \in \mathcal{X}$.
+Substituting the basis expansion into Eq.~\eqref{eq:V_general_K}, the drifting field evaluated on $\mathcal{X}$ (stored as a matrix $\mathbf{V}_{\mathcal{X}}$) is a bilinear combination:
+\begin{equation}
+\mathbf{V}_{\mathcal{X}} \triangleq \sum_{i=1}^m \sum_{j=1}^m a_i b_j \mathbf{U}_{ij}.
+\end{equation}
+Here, $\mathbf{V}_{\mathcal{X}} \in \mathbb{R}^{d{\times}N}$. At the equilibrium, we have $\mathbf{V}_{\mathcal{X}}=\textbf{0}$, which yields $dN$ linear equations.
+
+\paragraph{Linear independence assumption.}
+Our anti-symmetry condition implies that switching $p$ and $q$ negates the field. In terms of basis interactions, this means $\mathbf{U}_{ij} = -\mathbf{U}_{ji}$ (and consequently $\mathbf{U}_{ii} = \mathbf{0}$).
+We make the \emph{generic non-degeneracy assumption}:
+% \begin{center}
+\textit{The set of vectors $\{\mathbf{U}_{ij}\}_{1 \le i < j \le m}$ is linearly independent in $\mathbb{R}^{dN}$.}
+% \end{center}
+This assumption requires the probes $\mathcal{X}$ and kernel $K$ to be non-degenerate; if all $\mathbf{x}$ yield identical constraints, independence would fail. For generic choices of $K$ and sufficiently diverse probes $\mathcal{X}$ with $dN\gg m^2$, such linear independence is a natural non-degeneracy condition.
+
+
+\paragraph{Uniqueness of the equilibrium.}
+The zero-drift condition $\mathbf{V}(\mathbf{x}) \equiv \mathbf{0}$ implies $\mathbf{V}_{\mathcal{X}} = \mathbf{0}$. Grouping terms by the independent basis vectors $\{\mathbf{U}_{ij}\}_{i<j}$, we have:
+\begin{equation}
+\sum_{1 \le i < j \le m} (a_i b_j - a_j b_i) \mathbf{U}_{ij} = \mathbf{0}.
+\end{equation}
+By the linear independence assumption, the coefficients must vanish: $a_i b_j - a_j b_i = 0$ for all $i,j$.
+This implies that the vector $\mathbf{a}$ is parallel to $\mathbf{b}$ (i.e., $\mathbf{a} \propto \mathbf{b}$).
+Since $p$ and $q$ are probability densities (implying $\int p = \int q = 1$), we must have $\mathbf{a} = \mathbf{b}$, and thus $p=q$.
+
+\paragraph{Connection to the mean shift field.}
+The mean-shift field fits this framework.
+The update vector (before normalization) is
+$\mathbb{E}_{p,q}[ k(\mathbf{x},\mathbf{y}^+) k(\mathbf{x},\mathbf{y}^-) (\mathbf{y}^+ - \mathbf{y}^-) ]$.
+Assuming the normalization factors $Z_p$ and $Z_q$ are finite, the condition $\mathbf{V}(\mathbf{x}) = \mathbf{0}$ implies the numerator integral vanishes, which corresponds to an interaction kernel of the form:
+\begin{equation}
+K(\mathbf{x}, \mathbf{y}^+, \mathbf{y}^-) = k(\mathbf{x},\mathbf{y}^+)\, k(\mathbf{x},\mathbf{y}^-)\, (\mathbf{y}^+ - \mathbf{y}^-).
+\end{equation}
+This kernel generates the bilinear structure analyzed above.
+Since we can choose $N$ such that $dN \gg m^2$, the dimension of the test space is much larger than the number of basis pairs. Thus, the linear independence of $\{\mathbf{U}_{ij}\}$ is expected to hold for generic configurations.
+Finally, for general distributions $p$ and $q$, we can approximate them using a sufficiently large basis expansion, turning into $\tilde p$ and $\tilde q$. When the basis approximation is sufficiently accurate, $\tilde p \approx p$ and $\tilde q \approx q$, and the drift field $\mathbf{V}_{\tilde p, \tilde q}\approx \mathbf{V}_{p,q}\approx 0$. By the argument above, $\tilde p\approx \tilde q$, and thus $p\approx q$.
+
+
+The argument above works for general form of drifting field, under mild anti-degeneracy assumptions.
+
+
+\subsection{The Drifting Field of MMD}
+\label{sec:theory_mmd_relation}
+
+In principle, if a method minimizes a discrepancy between two distributions $p$ and $q$ and reaches minimum at $p=q$, then from the perspective of our framework, a drifting field $\V$ exists that governs sample movement: we can let $\V{\propto}{-}\frac{\partial\mathcal L }{\partial {\x}}$, which is zero when $p=q$.
+We discuss the formulation of this $\V$ for a loss based on Maximum Mean Discrepancy (MMD) \cite{li2015generative,dziugaite2015training}.
+
+\newcommand{\kkk}{\tilde{k}}
+\paragraph{Gradients of Drifting Loss.}
+With $\x=f_\theta(\e)$, our drifting loss in Eq.~(\ref{eq:train_loss}) can be written as:
+\begin{equation}
+\mathcal{L}
+=
+\mathbb{E}_{\x{\sim}q}
+[
+\mathcal{L}(\x)
+]
+=
+\mathbb{E}_{\x{\sim}q}
+\Big[
+\big\|
+\x
+-
+\text{\texttt{sg}}\big(
+\x
++
+\V(\x)
+\big)
+\big\|^2
+\Big],
+\end{equation}
+where ``\texttt{sg}'' is short for stop-gradient. The gradient w.r.t. the parameters $\theta$ is computed by:
+\begin{equation}
+\frac{\partial\mathcal L }{\partial {\theta}} =
+\mathbb{E}_{\x{\sim}q}\Big[
+\frac{\partial\mathcal L(\x) }{\partial {\x}} \frac{\partial\x}{\partial\theta}
+\Big].
+\end{equation}
+where
+$
+\frac{\partial\mathcal L(\x) }{\partial {\x}}{=}2
+(
+\x
+{-}
+\text{\texttt{sg}}(
+\x
+{+}
+\V(\x)
+)
+)
+{=}{-}2\V(\x)
+$. This gives:
+\begin{equation}
+\label{eq:loss_2V}
+\V(\x) = -\frac{1}{2}\frac{\partial\mathcal L(\x) }{\partial {\x}}
+\end{equation}
+We note that this formulation is general and imposes no constraints on $\V$, except that $\V=\textbf{0}$ when $p=q$.
+
+Our method does not require $\mathcal{L}$ to define a discrepancy between $p$ and $q$. However, for other methods that depend on minimizing a discrepancy $\mathcal{L}$, we can induce a drifting field via (\ref{eq:loss_2V}). This is valid if $\mathcal{L}$ is minimized when $p=q$.
+
+\paragraph{Gradients of MMD Loss.}
+\newcommand{\kk}{\xi}
+\newcommand{\LMMD}{\mathcal{L}_{\text{MMD}^2}}
+In MMD-based methods (\eg, \citealt{li2015generative}), the difference between two distributions $p$ and $q$ is measured by squared MMD:
+\begin{equation}
+\label{eq:mmd2_def}
+\begin{aligned}
+\LMMD(p,q)
+= &
+\mathbb{E}_{\x,\x'\sim q}[\kk(\x,\x')]
+-2\,\mathbb{E}_{\y\sim p,\;\x\sim q}[\kk(\y,\x)]
+\\
++ &~const.
+\end{aligned}
+\end{equation}
+Here, the constant term is $\mathbb{E}_{\y,\y'\sim p}[\kk(\y,\y')]$, which depends only on the target distribution $p$ and remains unchanged. $\kk$ is a kernel function.
+
+Consider $\x=f_\theta(\e)$ with $\e\sim p_\e$. The gradient estimation performed in \cite{li2015generative} corresponds to:
+\begin{equation}
+\frac{\partial\LMMD}{\partial {\theta}} =
+\mathbb{E}_{\x{\sim}q}\Big[\frac{\partial\LMMD(\x)}{\partial {\x}} \frac{\partial\x}{\partial\theta}
+\Big]
+\end{equation}
+where the gradient w.r.t $\x$ is computed by:
+\begin{equation}
+\frac{\partial\LMMD(\x)}{\partial {\x}}
+=
+2\mathbb{E}_{\x'{\sim}q} \Big[\frac{\partial \kk(\x,\x')}{\partial{\x}}\Big]
+-
+2\mathbb{E}_{\y{\sim}p} \Big[\frac{\partial \kk(\x,\y)}{\partial{\x}}\Big].
+\end{equation}
+Using our notation of positives and negatives, we rename the variables and rewrite as:
+\begin{equation}
+\label{eq:mmd_eq4}
+\frac{\partial\mathcal L_{\text{MMD}^2}(\x)}{\partial {\x}}
+=
+2\mathbb{E}_{\yn{\sim}q} \Big[\frac{\partial \kk(\x,\yn)}{\partial{\x}}\Big]
+-
+2\mathbb{E}_{\yp{\sim}p} \Big[\frac{\partial \kk(\x,\yp)}{\partial{\x}}\Big].
+\end{equation}
+Comparing with Eq.~(\ref{eq:loss_2V}), we obtain:
+\begin{equation}
+\label{eq:mmd_Vmmd}
+\V_\text{MMD}(\x)
+\triangleq
+\mathbb{E}_{\yp{\sim}p} \Big[\frac{\partial \kk(\x,\yp)}{\partial{\x}}\Big]
+-
+\mathbb{E}_{\yn{\sim}q} \Big[\frac{\partial \kk(\x,\yn)}{\partial{\x}}\Big]
+\end{equation}
+This is the underlying drifting field that corresponds to the MMD loss $\LMMD$.
+
+
+
+
+For a radial kernel $\kk(\x, \y)=\kk(R)$ where  $R=\|\x - \y\|^2$, the gradient of kernel is:
+\begin{equation}
+\frac{\partial\kk(\x, \y)}{\partial\x} =
+2\kk'(\|\x - \y\|^2)(\x - \y)
+\end{equation}
+where $\kk'$ is the derivative of the function $\kk(R)$.
+Accordingly, Eq.~(\ref{eq:mmd_Vmmd}) becomes:
+\begin{equation}
+\begin{aligned}
+\label{eq:mmd_Vmmd2}
+\V_\text{MMD}(\x)
+= &
+\mathbb{E}_{\yp{\sim}p} \Big[
+2\kk'(\|\x - \yp\|^2)(\x - \yp)
+\Big].
+\\ - &
+\mathbb{E}_{\yn{\sim}q} \Big[
+2\kk'(\|\x - \yn\|^2)(\x - \yn)
+\Big]
+\end{aligned}
+\end{equation}
+In \cite{li2015generative}, the Gaussian kernel is used: $\kk(\x, \y) = \exp (-\frac{1}{2\sigma^2} \|\x{-}\y\|^2)$, leading to $\kk'(\|\x{-}\y\|^2)=-\frac{1}{2\sigma^2}\exp (-\frac{1}{2\sigma^2} \|\x{-}\y\|^2)$.
+
+\paragraph{Relations and Differences.}
+When using our definition of $\V = \V^{+} - \V^{-}$ (\ie, Eq.~(\ref{eq:V_pos_neg})), we have:
+\begin{equation}
+\begin{aligned}
+\label{eq:mmd_eq6}
+\V(\x)
+= &
+\mathbb{E}_{\yp{\sim}p} \Big[
+\tilde{k}(\x, \yp)(\yp - \x)
+\Big] \\
+- &
+\mathbb{E}_{\yn{\sim}q} \Big[
+\tilde{k}(\x, \yn)(\yn - \x)
+\Big]
+\end{aligned}
+\end{equation}
+
+Comparing (\ref{eq:mmd_Vmmd2}) with (\ref{eq:mmd_eq6}), we show that the underlying kernel used to build the drifting field of MMD is:
+\begin{equation}
+\label{eq:mmd_eq7}
+\tilde{k}_\text{MMD}(\x, \y)=-2\kk'(\|\x - \y\|^2).
+\end{equation}
+When $\kk$ is a Gaussian function, we have: $\tilde{k}(\x, \y)=\frac{1}{\sigma^2}\exp (-\frac{1}{2\sigma^2} \|\x{-}\y\|^2)$.
+Without normalization, the resulting drift no longer satisfies the assumptions underlying Alg.~\ref{alg:drift_code}, and the mean-shift interpretation breaks down.
+
+As a comparison, our general formulation enables to use \textit{normalized} kernels:
+\begin{equation}
+\tilde{k}(\x, \y)=\frac{1}{Z(\x)}k(\x, \y)=\frac{1}{\mathbb{E}_\y[k(\x, \y)]}k(\x, \y),
+\end{equation}
+where the expectation is over $p$ or $q$.
+Only when we use normalized kernels, we have (see Eq.~(\ref{eq:VZZ})):
+\begin{equation}
+\V(\x)
+= {\mathbb{E}_{p,q}\!\left[\tilde{k}(\x,\yp)\tilde{k}(\x,\yn)(\yp - \yn)\right]},
+\end{equation}
+on which our Alg.~\ref{alg:drift_code} is based.
+
+Given this relation, we summarize the key differences between our model and the MMD-based methods as follows:
+\begin{enumerate}
+[itemsep=1pt, topsep=1pt, parsep=1pt, partopsep=1pt, label=(\roman*)]
+    \item Our method is formulated around the drifting field $\V$, which is more flexible and general.
+    \item Our method supports and leverages \textit{normalized} kernels $\frac{1}{Z}k(\x, \y)$ that cannot be naturally derived from the MMD perspective.
+    % \item Our method does not require the kernel to be the derivative of another function (\cf~(\ref{eq:mmd_eq7})). This requirement cannot be satisfied if $\tilde{k}$ is a normalized kernel.
+    \item Our $\V$-centric formulation enables a flexible step size for drifting (\ie, $\x \leftarrow \x{+}\eta\V$) and therefore naturally supports $\V$-normalization (see \ref{sec:appendix_feature_and_loss_normalization}).
+    \item Our $\V$-centric formulation allows the equilibrium concept to be naturally extended to support CFG, whereas a CFG variant for MMD remains unexplored.
+\end{enumerate}
+In summary, although a special case of our method reduces to MMD, our $\V$-centric framework is more general and enables unique possibilities that are important in practice.
+In our experiments, we were not able to obtain reasonable results using the MMD framework.
+
+
+% Note: Remaining image showcase left out due to size considerations
+
+\end{document}
