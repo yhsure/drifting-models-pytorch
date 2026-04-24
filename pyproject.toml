@@ -18,6 +18,7 @@ dependencies = [
   "scipy>=1.13.0",
   "torch>=2.11.0,<2.12",
   "torchmetrics[image]>=1.4.0",
+  "torchrun-jsc>=0.0.19",
   "torchvision>=0.26.0,<0.27",
   "tqdm>=4.66.0",
   "transformers>=4.44.0,<5",

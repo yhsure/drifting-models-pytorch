@@ -261,6 +261,7 @@ dependencies = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torchmetrics", extra = ["image"] },
+    { name = "torchrun-jsc" },
     { name = "torchvision" },
     { name = "tqdm" },
     { name = "transformers" },
@@ -288,6 +289,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.13.0" },
     { name = "torch", specifier = ">=2.11.0,<2.12" },
     { name = "torchmetrics", extras = ["image"], specifier = ">=1.4.0" },
+    { name = "torchrun-jsc", specifier = ">=0.0.19" },
     { name = "torchvision", specifier = ">=0.26.0,<0.27" },
     { name = "tqdm", specifier = ">=4.66.0" },
     { name = "transformers", specifier = ">=4.44.0,<5" },
@@ -1607,6 +1609,19 @@ image = [
     { name = "scipy" },
     { name = "torch-fidelity" },
     { name = "torchvision" },
+]
+
+[[package]]
+name = "torchrun-jsc"
+version = "0.0.19"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/91/8922bb71c550817693464f5a9123bb8ab5c83836515fcfa6d14d67ab0d07/torchrun_jsc-0.0.19.tar.gz", hash = "sha256:4677df28fbab5f8c8698a322ef82913eb777dc564e18bf9854bd5eb81e978f86", size = 13784, upload-time = "2025-11-27T22:58:05.948Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/11/8a/80eee042c55093439b2746ba80fc753f0f43927ea2f29b56a8d8e3e6f3b6/torchrun_jsc-0.0.19-py3-none-any.whl", hash = "sha256:fe4dc8c7b5301bd32bcb6a34a2f56c1f4be65e77164aa9a6dadf361d01bc9c54", size = 17105, upload-time = "2025-11-27T22:58:04.346Z" },
 ]
 
 [[package]]

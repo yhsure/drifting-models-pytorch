@@ -111,7 +111,7 @@ Basic GitHub Actions CI is in `.github/workflows/ci.yml`:
 
 ## Slurm
 
-Shared setup: `scripts/slurm/common.sh`. Submit from the repository root; see `scripts/slurm/README.md` for allocation flags (`--exclusive`, 288 CPUs per node).
+Shared setup: `scripts/slurm/common.sh`. Slurm jobs launch with `srun env -u CUDA_VISIBLE_DEVICES .venv/bin/python -u -m torchrun_jsc` and export JSC InfiniBand networking defaults from `common.sh`. Submit from the repository root; see `scripts/slurm/README.md` for allocation flags (`--exclusive`, 288 CPUs per node).
 
 ```bash
 sbatch scripts/slurm/mae_1node_smoke.sbatch

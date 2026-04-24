@@ -18,7 +18,7 @@ source "${PWD}/scripts/slurm/common.sh"
 drift_setup
 
 NPROC="$(drift_nproc_per_node)"
-exec srun --ntasks=1 "${REPO_ROOT}/.venv/bin/torchrun" \
+exec srun env -u CUDA_VISIBLE_DEVICES "${REPO_ROOT}/.venv/bin/python" -u -m torchrun_jsc \
   --standalone \
   --nproc-per-node="${NPROC}" \
   main.py --config configs/dev/smoke_mae.yaml --workdir runs/slurm_1node_mae_smoke

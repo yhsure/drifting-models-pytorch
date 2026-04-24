@@ -18,11 +18,8 @@ source "${PWD}/scripts/slurm/common.sh"
 drift_setup
 
 NPROC="$(drift_nproc_per_node)"
-MASTER_ADDR="$(scontrol show hostnames "${SLURM_JOB_NODELIST}" | head -n 1)"
-MASTER_PORT=$((10000 + SLURM_JOB_ID % 55000))
-export MASTER_ADDR MASTER_PORT
 
-exec srun "${REPO_ROOT}/.venv/bin/torchrun" \
+exec srun env -u CUDA_VISIBLE_DEVICES "${REPO_ROOT}/.venv/bin/python" -u -m torchrun_jsc \
   --nnodes="${SLURM_NNODES}" \
   --node-rank="${SLURM_NODEID}" \
   --nproc-per-node="${NPROC}" \
