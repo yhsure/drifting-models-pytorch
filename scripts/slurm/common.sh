@@ -58,42 +58,6 @@ function drift_setup() {
   uv sync --group dev
 }
 
-# Copies DATA_PATH into /dev/shm on every node (once per node) and updates
-# DRIFT_DATA_PATH to point at the shm location.
-# Usage: drift_copy_to_shm <data_path>  or set DRIFT_DATA_PATH before calling.
-# The tar archive is created on first call and reused on subsequent calls.
-# Call this after drift_setup and before the training srun.
-function drift_copy_to_shm() {
-  local data_path="${1:-${DRIFT_DATA_PATH:?DRIFT_DATA_PATH must be set or passed as argument}}"
-  local scratch="${SCRATCH:?SCRATCH must be set}"
-  local tar_path="${scratch}/$(basename "${data_path}").tar"
-  local shm_path="/dev/shm/$(whoami)/$(basename "${data_path}")"
-
-  # Create tar archive on the launch node (skipped if already exists).
-  if [[ ! -e "${tar_path}" ]]; then
-    echo "[drift] Creating tar archive: ${tar_path}"
-    tar cf "${tar_path}" -C "$(dirname "${data_path}")" "$(basename "${data_path}")"
-  fi
-
-  export _DRIFT_TAR_PATH="${tar_path}"
-  export _DRIFT_SHM_PATH="${shm_path}"
-
-  _drift_extract_to_shm() {
-    rm -rf "${_DRIFT_SHM_PATH}"
-    mkdir -p "${_DRIFT_SHM_PATH}"
-    tar xf "${_DRIFT_TAR_PATH}" -C "$(dirname "${_DRIFT_SHM_PATH}")"
-    chmod 700 "${_DRIFT_SHM_PATH}"
-  }
-  export -f _drift_extract_to_shm
-
-  # Run exactly one extraction task per node.
-  echo "[drift] Copying data to /dev/shm on all nodes..."
-  srun --ntasks-per-node=1 bash -c _drift_extract_to_shm
-  echo "[drift] Data available at: ${shm_path}"
-
-  export DRIFT_DATA_PATH="${shm_path}"
-}
-
 function drift_nproc_per_node() {
   cd "${REPO_ROOT}"
   local n
