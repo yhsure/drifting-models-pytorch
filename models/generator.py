@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -13,116 +12,66 @@ from utils.env import HF_REPO_ID, HF_ROOT
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     assert embed_dim % 2 == 0
-    omega = np.arange(embed_dim // 2, dtype=np.float64)
+    omega = torch.arange(embed_dim // 2, dtype=torch.float64)
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000**omega
     pos = pos.reshape(-1)
-    out = np.einsum("m,d->md", pos, omega)
-    emb_sin = np.sin(out)
-    emb_cos = np.cos(out)
-    return np.concatenate([emb_sin, emb_cos], axis=1)
+    out = torch.einsum("m,d->md", pos, omega)
+    emb_sin = torch.sin(out)
+    emb_cos = torch.cos(out)
+    return torch.cat([emb_sin, emb_cos], dim=1)
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size):
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
-    grid = np.meshgrid(grid_w, grid_h)
-    grid = np.stack(grid, axis=0)
-    grid = grid.reshape([2, 1, grid_size, grid_size])
+    grid_h = torch.arange(grid_size, dtype=torch.float32)
+    grid_w = torch.arange(grid_size, dtype=torch.float32)
+    grid = torch.meshgrid(grid_w, grid_h, indexing="xy")
+    grid = torch.stack(grid, dim=0)
+    grid = grid.reshape(2, 1, grid_size, grid_size)
 
     embed_dim_half = embed_dim // 2
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim_half, grid[0])
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim_half, grid[1])
-    return np.concatenate([emb_h, emb_w], axis=1)
+    return torch.cat([emb_h, emb_w], dim=1)
 
 
 def sincos_init(embed_dim, num_patches):
-    grid_size = int(np.sqrt(num_patches))
+    grid_size = int(math.sqrt(num_patches))
     pe = get_2d_sincos_pos_embed(embed_dim, grid_size)
-    return torch.from_numpy(pe).float().unsqueeze(0)
+    return pe.float().unsqueeze(0)
 
-
-class TorchLinear(nn.Module):
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        bias: bool = True,
-        weight_init: str = "xavier_uniform",
-        bias_init: str = "zeros",
-        dtype: Any = torch.float32,
-    ):
-        super().__init__()
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
-        self.dtype = dtype
-
-        if weight_init == "xavier_uniform":
-            nn.init.xavier_uniform_(self.linear.weight)
-        elif weight_init == "zeros":
-            nn.init.zeros_(self.linear.weight)
-        elif weight_init == "normal":
-            nn.init.normal_(self.linear.weight, std=0.02)
-        else:
-            nn.init.xavier_uniform_(self.linear.weight)
-
-        if self.linear.bias is not None:
-            if bias_init == "zeros":
-                nn.init.zeros_(self.linear.bias)
-            else:
-                nn.init.constant_(self.linear.bias, 0.0)
-
-    def forward(self, x):
-        return self.linear(x.to(self.linear.weight.dtype))
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, elementwise_affine: bool = True):
-        super().__init__()
-        self.eps = eps
-        self.elementwise_affine = elementwise_affine
-        if elementwise_affine:
-            self.weight = nn.Parameter(torch.ones(dim))
-        else:
-            self.register_parameter("weight", None)
-
-    def forward(self, x):
-        var = x.float().pow(2).mean(dim=-1, keepdim=True)
-        normed = x * torch.rsqrt(var + self.eps)
-        if self.elementwise_affine:
-            normed = normed * self.weight
-        return normed
-
+# PORT FROM https://github.com/facebookresearch/DiT/blob/main/models.py
 
 def modulate(x, shift, scale):
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
-def apply_rope(q, k, dtype=torch.float32):
-    bsz, seqlen, nheads, dim = q.shape
-    half_dim = dim // 2
-    freqs = (1.0 / (10000 ** (torch.arange(0, half_dim, device=q.device, dtype=dtype) / half_dim))).to(dtype)
-    t = torch.arange(seqlen, device=q.device, dtype=dtype)
-    freqs = torch.outer(t, freqs)
-    emb = torch.cat([freqs, freqs], dim=-1)
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, max_seq_len: int = 4096, base: float = 10000.0):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        t = torch.arange(max_seq_len, dtype=torch.float32)
+        freqs = torch.outer(t, inv_freq)
+        self.register_buffer("cos_cached", freqs.cos().view(1, max_seq_len, 1, -1), persistent=False)
+        self.register_buffer("sin_cached", freqs.sin().view(1, max_seq_len, 1, -1), persistent=False)
 
-    cos = torch.cos(emb)[None, :, None, :]
-    sin = torch.sin(emb)[None, :, None, :]
-
-    def rotate_half(x):
-        x1, x2 = x[..., :half_dim], x[..., half_dim:]
-        return torch.cat([-x2, x1], dim=-1)
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    def forward(self, q, k):
+        seq_len = q.size(1)
+        cos = self.cos_cached[:, :seq_len].to(q.dtype)
+        sin = self.sin_cached[:, :seq_len].to(q.dtype)
+        q1, q2 = q.chunk(2, dim=-1)
+        k1, k2 = k.chunk(2, dim=-1)
+        q_out = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+        k_out = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
+        return q_out, k_out
 
 
 class SwiGLUFFN(nn.Module):
-    def __init__(self, hidden_size: int, intermediate_size: int, dtype: Any = torch.float32):
+    def __init__(self, hidden_size: int, intermediate_size: int):
         super().__init__()
-        self.w1 = TorchLinear(hidden_size, intermediate_size, bias=True, dtype=dtype)
-        self.w3 = TorchLinear(hidden_size, intermediate_size, bias=True, dtype=dtype)
-        self.w2 = TorchLinear(intermediate_size, hidden_size, bias=True, dtype=dtype)
+        self.w1 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.w3 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.w2 = nn.Linear(intermediate_size, hidden_size, bias=True)
 
     def forward(self, x):
         w1 = self.w1(x)
@@ -142,8 +91,6 @@ class Attention(nn.Module):
         use_rope: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
-        attn_fp32: bool = True,
-        dtype: Any = torch.float32,
     ):
         super().__init__()
         self.dim = dim
@@ -153,15 +100,15 @@ class Attention(nn.Module):
         self.use_rope = use_rope
         self.attn_drop = attn_drop
         self.proj_drop = proj_drop
-        self.attn_fp32 = attn_fp32
 
-        self.qkv = TorchLinear(dim, dim * 3, bias=qkv_bias, dtype=dtype)
-        self.proj = TorchLinear(dim, dim, bias=True, dtype=dtype)
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.proj = nn.Linear(dim, dim, bias=True)
         head_dim = dim // num_heads
+        self.rope = RotaryEmbedding(head_dim) if use_rope else None
         if qk_norm:
             if use_rmsnorm:
-                self.q_norm = RMSNorm(head_dim)
-                self.k_norm = RMSNorm(head_dim)
+                self.q_norm = nn.RMSNorm(head_dim)
+                self.k_norm = nn.RMSNorm(head_dim)
             else:
                 self.q_norm = nn.LayerNorm(head_dim, eps=1e-6)
                 self.k_norm = nn.LayerNorm(head_dim, eps=1e-6)
@@ -169,7 +116,7 @@ class Attention(nn.Module):
             self.q_norm = None
             self.k_norm = None
 
-    def forward(self, x, deterministic=True, return_qk=False):
+    def forward(self, x, return_qk=False):
         bsz, seqlen, dim = x.shape
         head_dim = dim // self.num_heads
 
@@ -180,43 +127,30 @@ class Attention(nn.Module):
             q = self.q_norm(q)
             k = self.k_norm(k)
         if self.use_rope:
-            rope_dtype = torch.float32 if self.attn_fp32 else q.dtype
-            q, k = apply_rope(q, k, dtype=rope_dtype)
+            q, k = self.rope(q, k)
 
         qk = (q, k) if return_qk else None
-
-        if self.attn_fp32:
-            q = q.float() * (head_dim ** -0.5)
-            k = k.float()
-            v = v.float()
-        else:
-            q = q * (head_dim ** -0.5)
 
         q = q.permute(0, 2, 1, 3)
         k = k.permute(0, 2, 1, 3)
         v = v.permute(0, 2, 1, 3)
 
-        attn_logits = torch.matmul(q, k.transpose(-1, -2))
-        attn_weights = torch.softmax(attn_logits, dim=-1)
-        if self.attn_drop > 0:
-            attn_weights = F.dropout(attn_weights, p=self.attn_drop, training=not deterministic)
-
-        out = torch.matmul(attn_weights, v)
+        out = F.scaled_dot_product_attention(q, k, v, dropout_p=self.attn_drop if self.training else 0.0)
         out = out.permute(0, 2, 1, 3).reshape(bsz, seqlen, dim)
         out = self.proj(out)
         if self.proj_drop > 0:
-            out = F.dropout(out, p=self.proj_drop, training=not deterministic)
+            out = F.dropout(out, p=self.proj_drop, training=self.training)
         return out, qk
 
 
 class StandardMLP(nn.Module):
-    def __init__(self, hidden_size: int, mlp_hidden_dim: int, dtype: Any = torch.float32):
+    def __init__(self, hidden_size: int, mlp_hidden_dim: int):
         super().__init__()
-        self.fc1 = TorchLinear(hidden_size, mlp_hidden_dim, bias=True, dtype=dtype)
-        self.fc2 = TorchLinear(mlp_hidden_dim, hidden_size, bias=True, dtype=dtype)
+        self.fc1 = nn.Linear(hidden_size, mlp_hidden_dim, bias=True)
+        self.fc2 = nn.Linear(mlp_hidden_dim, hidden_size, bias=True)
 
     def forward(self, x):
-        return self.fc2(F.gelu(self.fc1(x), approximate="none"))
+        return self.fc2(F.gelu(self.fc1(x), approximate="tanh"))
 
 
 class LightningDiTBlock(nn.Module):
@@ -228,19 +162,14 @@ class LightningDiTBlock(nn.Module):
         use_qknorm: bool = False,
         use_swiglu: bool = False,
         use_rmsnorm: bool = False,
-        cond_dim: Optional[int] = None,
         use_rope: bool = False,
-        attn_fp32: bool = True,
-        dtype: Any = torch.float32,
     ):
         super().__init__()
-        del cond_dim
         self.hidden_size = hidden_size
-        self.dtype = dtype
 
         if use_rmsnorm:
-            self.norm1 = RMSNorm(hidden_size)
-            self.norm2 = RMSNorm(hidden_size)
+            self.norm1 = nn.RMSNorm(hidden_size)
+            self.norm2 = nn.RMSNorm(hidden_size)
         else:
             self.norm1 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
             self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
@@ -252,29 +181,26 @@ class LightningDiTBlock(nn.Module):
             qk_norm=use_qknorm,
             use_rmsnorm=use_rmsnorm,
             use_rope=use_rope,
-            attn_fp32=attn_fp32,
-            dtype=dtype,
         )
 
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         if use_swiglu:
             hid_size = int(2 / 3 * mlp_hidden_dim)
             hid_size = (hid_size + 31) // 32 * 32
-            self.mlp = SwiGLUFFN(hidden_size, hid_size, dtype=dtype)
+            self.mlp = SwiGLUFFN(hidden_size, hid_size)
         else:
-            self.mlp = StandardMLP(hidden_size, mlp_hidden_dim, dtype=dtype)
+            self.mlp = StandardMLP(hidden_size, mlp_hidden_dim)
 
-        self.adaln = nn.Sequential(
-            nn.SiLU(),
-            TorchLinear(hidden_size, 6 * hidden_size, bias=True, weight_init="zeros", bias_init="zeros", dtype=torch.float32),
-        )
+        adaln_linear = nn.Linear(hidden_size, 6 * hidden_size, bias=True)
+        nn.init.zeros_(adaln_linear.weight)
+        nn.init.zeros_(adaln_linear.bias)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), adaln_linear)
 
-    def forward(self, x, c, deterministic=True):
-        chunks = self.adaln(c.float()).to(x.dtype)
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = torch.chunk(chunks, 6, dim=1)
+    def forward(self, x, c):
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
 
         x_norm = modulate(self.norm1(x), shift_msa, scale_msa)
-        x = x + gate_msa.unsqueeze(1) * self.attn(x_norm, deterministic=deterministic)[0]
+        x = x + gate_msa.unsqueeze(1) * self.attn(x_norm)[0]
 
         x_norm = modulate(self.norm2(x), shift_mlp, scale_mlp)
         x = x + gate_mlp.unsqueeze(1) * self.mlp(x_norm)
@@ -288,30 +214,22 @@ class FinalLayer(nn.Module):
         patch_size: int,
         out_channels: int,
         use_rmsnorm: bool = False,
-        cond_dim: Optional[int] = None,
-        dtype: Any = torch.float32,
     ):
         super().__init__()
-        del cond_dim
         if use_rmsnorm:
-            self.norm_final = RMSNorm(hidden_size)
+            self.norm_final = nn.RMSNorm(hidden_size)
         else:
             self.norm_final = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
-        self.adaln = nn.Sequential(
-            nn.SiLU(),
-            TorchLinear(hidden_size, 2 * hidden_size, bias=True, weight_init="zeros", bias_init="zeros", dtype=torch.float32),
-        )
-        self.linear = TorchLinear(
-            hidden_size,
-            patch_size * patch_size * out_channels,
-            bias=True,
-            weight_init="zeros",
-            bias_init="zeros",
-            dtype=dtype,
-        )
+        adaln_linear = nn.Linear(hidden_size, 2 * hidden_size, bias=True)
+        nn.init.zeros_(adaln_linear.weight)
+        nn.init.zeros_(adaln_linear.bias)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), adaln_linear)
+        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
+        nn.init.zeros_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
 
     def forward(self, x, c):
-        shift, scale = torch.chunk(self.adaln(c.float()).to(x.dtype), 2, dim=1)
+        shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
         x = modulate(self.norm_final(x), shift, scale)
         return self.linear(x)
 
@@ -333,12 +251,10 @@ class LightningDiT(nn.Module):
         use_rmsnorm: bool = False,
         cond_dim: Optional[int] = None,
         n_cls_tokens: int = 0,
-        attn_fp32: bool = True,
-        dtype: Any = torch.float32,
-        use_remat: bool = False,
+        checkpointing: bool = False,
     ):
         super().__init__()
-        del use_remat
+        self.checkpointing = checkpointing
         self.input_size = input_size
         self.patch_size = patch_size
         self.in_channels = in_channels
@@ -353,17 +269,15 @@ class LightningDiT(nn.Module):
         self.use_rmsnorm = use_rmsnorm
         self.cond_dim = cond_dim
         self.n_cls_tokens = n_cls_tokens
-        self.attn_fp32 = attn_fp32
-        self.dtype = dtype
 
         num_patches = (input_size // patch_size) ** 2
         patch_dim = patch_size * patch_size * in_channels
-        self.patch_embed = TorchLinear(patch_dim, hidden_size, bias=True, dtype=dtype)
+        self.patch_embed = nn.Linear(patch_dim, hidden_size, bias=True)
         self.pos_embed = nn.Parameter(sincos_init(hidden_size, num_patches))
 
         if n_cls_tokens > 0:
             cond_in = cond_dim if cond_dim is not None else hidden_size
-            self.cls_proj = TorchLinear(cond_in, hidden_size, bias=True, dtype=dtype)
+            self.cls_proj = nn.Linear(cond_in, hidden_size, bias=True)
             self.cls_embed = nn.Parameter(torch.randn(1, n_cls_tokens, hidden_size) * 0.02)
         else:
             self.cls_proj = None
@@ -378,10 +292,7 @@ class LightningDiT(nn.Module):
                     use_qknorm=use_qknorm,
                     use_swiglu=use_swiglu,
                     use_rmsnorm=use_rmsnorm,
-                    cond_dim=cond_dim,
                     use_rope=use_rope,
-                    attn_fp32=attn_fp32,
-                    dtype=dtype,
                 )
                 for _ in range(depth)
             ]
@@ -392,11 +303,9 @@ class LightningDiT(nn.Module):
             patch_size=patch_size,
             out_channels=out_channels,
             use_rmsnorm=use_rmsnorm,
-            cond_dim=cond_dim,
-            dtype=dtype,
         )
 
-    def forward(self, x, c, deterministic=True):
+    def forward(self, x, c):
         bsz, h, w, channels = x.shape
         p = self.patch_size
 
@@ -420,7 +329,10 @@ class LightningDiT(nn.Module):
             x = torch.cat([c_tokens, x], dim=1)
 
         for block in self.blocks:
-            x = block(x, c, deterministic=deterministic)
+            if self.checkpointing:
+                x = torch.utils.checkpoint.checkpoint(block, x, c, use_reentrant=False)
+            else:
+                x = block(x, c)
 
         x = self.final_layer(x, c)
         if self.n_cls_tokens > 0:
@@ -432,15 +344,15 @@ class LightningDiT(nn.Module):
 
 
 class TimestepEmbedder(nn.Module):
-    def __init__(self, hidden_size: int, frequency_embedding_size: int = 256, dtype: Any = torch.float32):
+    def __init__(self, hidden_size: int, frequency_embedding_size: int = 256):
         super().__init__()
         self.hidden_size = hidden_size
         self.frequency_embedding_size = frequency_embedding_size
-        self.mlp = nn.Sequential(
-            TorchLinear(frequency_embedding_size, hidden_size, bias=True, weight_init="normal", dtype=dtype),
-            nn.SiLU(),
-            TorchLinear(hidden_size, hidden_size, bias=True, weight_init="normal", dtype=dtype),
-        )
+        l1 = nn.Linear(frequency_embedding_size, hidden_size, bias=True)
+        nn.init.normal_(l1.weight, std=0.02)
+        l2 = nn.Linear(hidden_size, hidden_size, bias=True)
+        nn.init.normal_(l2.weight, std=0.02)
+        self.mlp = nn.Sequential(l1, nn.SiLU(), l2)
 
     def forward(self, t):
         half = self.frequency_embedding_size // 2
@@ -473,8 +385,7 @@ class DitGen(nn.Module):
         use_rope: bool = False,
         use_rmsnorm: bool = False,
         use_bf16: bool = False,
-        attn_fp32: bool = True,
-        use_remat: bool = False,
+        checkpointing: bool = False,
     ):
         super().__init__()
         self.cond_dim = cond_dim
@@ -495,8 +406,7 @@ class DitGen(nn.Module):
         self.use_rope = use_rope
         self.use_rmsnorm = use_rmsnorm
         self.use_bf16 = use_bf16
-        self.attn_fp32 = attn_fp32
-        self.use_remat = use_remat
+        self.checkpointing = checkpointing
         self.model_config = {
             "cond_dim": cond_dim,
             "num_classes": num_classes,
@@ -516,11 +426,8 @@ class DitGen(nn.Module):
             "use_rope": use_rope,
             "use_rmsnorm": use_rmsnorm,
             "use_bf16": use_bf16,
-            "attn_fp32": attn_fp32,
-            "use_remat": use_remat,
+            "checkpointing": checkpointing,
         }
-
-        dtype = torch.bfloat16 if use_bf16 else torch.float32
 
         self.class_embed = nn.Embedding(num_classes, cond_dim)
         nn.init.normal_(self.class_embed.weight, std=0.02)
@@ -534,8 +441,8 @@ class DitGen(nn.Module):
         else:
             self.noise_embeds = nn.ModuleList()
 
-        self.cfg_embedder = TimestepEmbedder(cond_dim, dtype=dtype)
-        self.cfg_norm = RMSNorm(cond_dim)
+        self.cfg_embedder = TimestepEmbedder(cond_dim)
+        self.cfg_norm = nn.RMSNorm(cond_dim)
 
         self.model = LightningDiT(
             input_size=input_size,
@@ -552,24 +459,11 @@ class DitGen(nn.Module):
             use_rmsnorm=use_rmsnorm,
             cond_dim=cond_dim,
             n_cls_tokens=n_cls_tokens,
-            attn_fp32=attn_fp32,
-            dtype=dtype,
-            use_remat=use_remat,
+            checkpointing=checkpointing,
         )
 
-    def dummy_input(self):
-        return {
-            "c": torch.ones(1, dtype=torch.long),
-            "cfg_scale": 1.0,
-            "temp": 1.0,
-            "deterministic": True,
-        }
-
-    def rng_keys(self):
-        return ["noise"]
-
-    def generate_image(self, x, cond, deterministic=True):
-        return self.model(x, cond, deterministic=deterministic)
+    def generate_image(self, x, cond):
+        return self.model(x, cond)
 
     def c_cfg_noise_to_cond(self, c, cfg_scale, noise_labels):
         bsz = c.shape[0]
@@ -584,15 +478,15 @@ class DitGen(nn.Module):
             cfg_scale_t = torch.as_tensor(cfg_scale, device=c.device, dtype=torch.float32)
             if cfg_scale_t.ndim == 0:
                 cfg_scale_t = cfg_scale_t.unsqueeze(0).repeat(bsz)
-        cfg_scale_t = self.cfg_norm(self.cfg_embedder(cfg_scale_t))
+        cfg_scale_t = self.cfg_embedder(cfg_scale_t)
+        cfg_scale_t = self.cfg_norm(cfg_scale_t.float()).to(cfg_scale_t.dtype)
         cond = cond + cfg_scale_t * 0.02
 
         if self.use_bf16:
             cond = cond.to(torch.bfloat16)
         return cond
 
-    def forward(self, c, cfg_scale=1.0, temp=1.0, deterministic=True, train=False):
-        del train
+    def forward(self, c, cfg_scale=1.0, temp=1.0):
         bsz = c.shape[0]
         device = c.device
 
@@ -608,7 +502,7 @@ class DitGen(nn.Module):
             device=device,
         )
         cond = self.c_cfg_noise_to_cond(c, cfg_scale, noise_labels)
-        samples = self.generate_image(x, cond, deterministic=deterministic)
+        samples = self.generate_image(x, cond)
 
         noise_dict = {
             "x": x,
