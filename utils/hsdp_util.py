@@ -142,7 +142,7 @@ def _to_device(x, device):
 
 def merge_data(data, use_ddp=False):
     del use_ddp
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = _device()
     return _to_device(data, device)
 
 

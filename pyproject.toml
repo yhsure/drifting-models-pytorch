@@ -9,6 +9,7 @@ dependencies = [
   "diffusers>=0.30.0",
   "einops>=0.8.0",
   "huggingface-hub>=0.24.0",
+  "msgpack>=1.1.0",
   "numpy>=1.26.0",
   "Pillow>=10.0.0",
   "pytorch-fid>=0.3.0",

@@ -5,8 +5,17 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import torch
+import torch.distributed as dist
 
 from utils.logging import log_for_0
+
+
+def _is_rank_zero() -> bool:
+    return not (dist.is_available() and dist.is_initialized()) or dist.get_rank() == 0
+
+
+def _unwrap_model(model):
+    return model.module if hasattr(model, "module") else model
 
 
 def _to_python_int(x) -> int:
@@ -65,6 +74,8 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
 
 def save_checkpoint(state, keep=2, keep_every=None, workdir: Optional[str] = None):
     del keep_every
+    if not _is_rank_zero():
+        return
     ckpt_dir = _job_ckpt_dir(workdir=workdir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
@@ -77,7 +88,7 @@ def save_checkpoint(state, keep=2, keep_every=None, workdir: Optional[str] = Non
 
     payload = {
         "step": _to_python_int(state.step),
-        "model": state.model.state_dict(),
+        "model": _unwrap_model(state.model).state_dict(),
         "ema_model": ema_payload,
         "ema_params": ema_payload,
         "optimizer": state.optimizer.state_dict() if state.optimizer is not None else None,
@@ -100,6 +111,8 @@ def save_params_ema_artifact(
     kind: str,
     model_config: Optional[Dict[str, Any]] = None,
 ) -> Path:
+    if not _is_rank_zero():
+        return _output_root(workdir) / "params_ema"
     step = _to_python_int(state.step)
     ema_decay = float(getattr(state, "ema_decay"))
 
