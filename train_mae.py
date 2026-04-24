@@ -12,7 +12,7 @@ import torch
 from tqdm import tqdm
 
 from dataset.dataset import epoch0_sampler, infinite_sampler
-from models.mae_model import MAEResNetJAX
+from models.mae_model import MAEResNet
 from utils.ckpt_util import restore_checkpoint, save_checkpoint, save_params_ema_artifact
 from utils.env import HF_ROOT
 from utils.hsdp_util import set_global_mesh
@@ -340,7 +340,7 @@ def main_mae(config, output_dir="runs"):
         config.logging = {}
     config.logging.name = Path(output_dir).resolve().name
 
-    model_dict = build_model_dict(config, MAEResNetJAX, workdir=output_dir)
+    model_dict = build_model_dict(config, MAEResNet, workdir=output_dir)
     train_mae(
         model=model_dict.model,
         optimizer=model_dict.optimizer,

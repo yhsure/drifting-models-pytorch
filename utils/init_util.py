@@ -20,12 +20,6 @@ def resolve_artifact_dir(path: str) -> Path:
         return ckpt_dir
     return base
 
-
-def put_like(tree: Any, template: Any) -> Any:
-    del template
-    return tree
-
-
 def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
     artifact_dir = resolve_artifact_dir(path)
     metadata_path = artifact_dir / "metadata.json"

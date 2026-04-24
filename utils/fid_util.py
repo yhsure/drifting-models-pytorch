@@ -32,27 +32,6 @@ def _to_uint8(samples):
     samples = np.nan_to_num(samples, nan=0.0, posinf=1.0, neginf=0.0)
     return (samples * 255).clip(0, 255).astype(np.uint8)
 
-
-def _to_local_cpu(jax_array):
-    if isinstance(jax_array, torch.Tensor):
-        return jax_array.detach().cpu().numpy()
-    return np.asarray(jax_array)
-
-
-def _revert_pmap_shape(x):
-    x = np.asarray(x)
-    if x.ndim < 3:
-        return x
-    return x.reshape((-1, *x.shape[2:]))
-
-
-def _build_jax_inception(batch_size=200):
-    del batch_size
-    block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[2048]
-    model = InceptionV3([block_idx]).eval()
-    return {"model": model}
-
-
 def _compute_features(samples_uint8: np.ndarray, device: torch.device, batch_size: int = 200) -> np.ndarray:
     if samples_uint8.shape[-1] == 3:
         samples_uint8 = samples_uint8.transpose(0, 3, 1, 2)
@@ -91,23 +70,6 @@ def _compute_stats(
         "sigma": np.cov(feats64, rowvar=False),
         "features": feats,
     }
-
-
-def _compute_inception_score(logits, splits=10):
-    rng = np.random.RandomState(2020)
-    logits = logits[rng.permutation(logits.shape[0]), :]
-    probs = torch.softmax(torch.as_tensor(logits), dim=-1).cpu().numpy().astype(np.float64)
-    n = probs.shape[0]
-    split_size = n // splits
-    probs = probs[: split_size * splits]
-    scores = []
-    for i in range(splits):
-        part = probs[i * split_size : (i + 1) * split_size]
-        py = np.mean(part, axis=0, keepdims=True)
-        kl = part * (np.log(part + 1e-10) - np.log(py + 1e-10))
-        scores.append(np.exp(np.mean(np.sum(kl, axis=1))))
-    scores = np.asarray(scores, dtype=np.float64)
-    return float(np.mean(scores)), float(np.std(scores))
 
 
 def _compute_inception_score_from_images(samples_uint8: np.ndarray, device: torch.device):

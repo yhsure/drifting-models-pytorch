@@ -202,7 +202,7 @@ def safe_std(x: torch.Tensor, axis, eps: float = 1e-6, keepdims: bool = False) -
     return torch.sqrt(torch.clamp(var, min=0.0) + eps)
 
 
-class MAEResNetJAX(nn.Module):
+class MAEResNet(nn.Module):
     def __init__(
         self,
         num_classes: int = 1000,
@@ -371,10 +371,14 @@ def load_mae_hf(
     return model, model.state_dict(), metadata
 
 
-def _mae_from_metadata(metadata: Dict[str, Any]) -> MAEResNetJAX:
+def _mae_from_metadata(metadata: Dict[str, Any]) -> MAEResNet:
     model_config = dict(metadata.get("model_config", {}) or {})
     num_classes = int(model_config.pop("num_classes", 1000))
-    return MAEResNetJAX(num_classes=num_classes, **model_config)
+    return MAEResNet(num_classes=num_classes, **model_config)
+
+
+# Backward-compatible alias for older import paths.
+MAEResNetJAX = MAEResNet
 
 
 def build_feature_model_and_params(

@@ -13,12 +13,6 @@ _vae_cache = {}
 def _get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-def _put_tree_on_local_tpu(tree):
-    """Compatibility helper retained from JAX codepath; no-op in PyTorch port."""
-    return tree
-
-
 def vae_enc_decode(replicate_params: bool = True):
     del replicate_params
     cache_key = ("vae_enc_decode",)

@@ -116,7 +116,7 @@ def create_cached_dataset(
     save_workers: int = 0,
 ) -> None:
     del save_workers
-    encode_fn, _ = vae_enc_decode(replicate_params=False)
+    encode_fn, _ = vae_enc_decode()
 
     Path(target_path, "train").mkdir(parents=True, exist_ok=True)
     Path(target_path, "val").mkdir(parents=True, exist_ok=True)
