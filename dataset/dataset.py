@@ -117,9 +117,7 @@ def create_imagenet_split(
     num_workers: int = 4,
     prefetch_factor: int = 2,
     pin_memory: bool = False,
-    local: bool | None = None,
 ):
-    del local
     ds = _build_imagenet_dataset(
         resolution=resolution,
         use_aug=use_aug,
@@ -147,8 +145,7 @@ def create_imagenet_split(
 
         if use_cache:
 
-            def preprocess_fn(batch, rng=0):
-                del rng
+            def preprocess_fn(batch):
                 cached_latent, label = batch
                 if not isinstance(cached_latent, torch.Tensor):
                     cached_latent = torch.as_tensor(cached_latent)
@@ -159,8 +156,7 @@ def create_imagenet_split(
         else:
             encode_fn, _ = vae_enc_decode()
 
-            def preprocess_fn(batch, rng=0):
-                del rng
+            def preprocess_fn(batch):
                 image, label = batch
                 if not isinstance(image, torch.Tensor):
                     image = torch.as_tensor(image)
@@ -175,8 +171,7 @@ def create_imagenet_split(
 
         return loader, preprocess_fn, postprocess_fn
 
-    def preprocess_fn(batch, rng=0):
-        del rng
+    def preprocess_fn(batch):
         image, label = batch
         if not isinstance(image, torch.Tensor):
             image = torch.as_tensor(image)

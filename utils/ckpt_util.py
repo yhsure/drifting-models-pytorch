@@ -9,6 +9,14 @@ import torch
 from utils.logging import log_for_0
 
 
+def _strip_compiled_prefix(state_dict: dict) -> dict:
+    """Remove the _orig_mod. prefix that torch.compile adds to parameter names."""
+    prefix = "_orig_mod."
+    if not any(k.startswith(prefix) for k in state_dict):
+        return state_dict
+    return {(k[len(prefix):] if k.startswith(prefix) else k): v for k, v in state_dict.items()}
+
+
 def _to_python_int(x) -> int:
     if isinstance(x, torch.Tensor):
         return int(x.detach().cpu().reshape(-1)[0].item())
@@ -50,10 +58,10 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
     if state is None:
         return payload
 
-    state.model.load_state_dict(payload["model"])
+    state.model.load_state_dict(_strip_compiled_prefix(payload["model"]))
     ema_payload = payload.get("ema_model", payload.get("ema_params"))
     if hasattr(state, "ema_model") and state.ema_model is not None and ema_payload is not None:
-        state.ema_model.load_state_dict(ema_payload)
+        state.ema_model.load_state_dict(_strip_compiled_prefix(ema_payload))
     if hasattr(state, "ema_params") and ema_payload is not None:
         state.ema_params = {k: v.clone() for k, v in ema_payload.items()}
     if state.optimizer is not None and "optimizer" in payload:
@@ -63,8 +71,7 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
     return state
 
 
-def save_checkpoint(state, keep=2, keep_every=None, workdir: Optional[str] = None):
-    del keep_every
+def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
     ckpt_dir = _job_ckpt_dir(workdir=workdir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
@@ -77,9 +84,9 @@ def save_checkpoint(state, keep=2, keep_every=None, workdir: Optional[str] = Non
 
     payload = {
         "step": _to_python_int(state.step),
-        "model": state.model.state_dict(),
-        "ema_model": ema_payload,
-        "ema_params": ema_payload,
+        "model": _strip_compiled_prefix(state.model.state_dict()),
+        "ema_model": _strip_compiled_prefix(ema_payload) if ema_payload is not None else None,
+        "ema_params": _strip_compiled_prefix(ema_payload) if ema_payload is not None else None,
         "optimizer": state.optimizer.state_dict() if state.optimizer is not None else None,
         "ema_decay": float(state.ema_decay),
     }
@@ -112,7 +119,7 @@ def save_params_ema_artifact(
         ema_payload = state.ema_params
     else:
         ema_payload = {}
-    torch.save(ema_payload, params_path)
+    torch.save(_strip_compiled_prefix(ema_payload), params_path)
 
     metadata = {
         "format": "torch.state_dict",

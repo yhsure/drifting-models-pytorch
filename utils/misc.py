@@ -4,7 +4,7 @@ import os
 import random
 import time
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 import numpy as np
 import torch
@@ -37,6 +37,49 @@ def _dict_to_easydict(d):
     return out
 
 
+_IGNORED_LEGACY_MODEL_KEYS = frozenset({"use_bf16", "attn_fp32"})
+_IGNORED_LEGACY_TRAIN_KEYS = frozenset({"keep_every"})
+
+
+def _sanitize_legacy_section(section: Mapping[str, Any] | None, ignored_keys: frozenset[str]) -> EasyDict:
+    clean = dict(section or {})
+    for key in ignored_keys:
+        clean.pop(key, None)
+    return _dict_to_easydict(clean)
+
+
+def sanitize_model_config(model_config: Mapping[str, Any] | None) -> EasyDict:
+    return _sanitize_legacy_section(model_config, _IGNORED_LEGACY_MODEL_KEYS)
+
+
+def sanitize_train_config(train_config: Mapping[str, Any] | None) -> EasyDict:
+    return _sanitize_legacy_section(train_config, _IGNORED_LEGACY_TRAIN_KEYS)
+
+
+def sanitize_runtime_config(config):
+    if not isinstance(config, dict):
+        return config
+    if isinstance(config.get("model"), dict):
+        config["model"] = sanitize_model_config(config["model"])
+    if isinstance(config.get("train"), dict):
+        config["train"] = sanitize_train_config(config["train"])
+    return config
+
+
+def maybe_compile(obj, level: int):
+    """Wrap obj with torch.compile at the requested depth.
+
+    0 — no compilation
+    1 — torch.compile with default settings
+    2 — torch.compile(dynamic=False, fullgraph=True)
+    """
+    if level == 0:
+        return obj
+    if level == 1:
+        return torch.compile(obj)
+    return torch.compile(obj, dynamic=False, fullgraph=True)
+
+
 def stamp_workdir(workdir: str) -> str:
     p = Path(workdir).expanduser()
     ts = time.strftime("%m%d_%H%M", time.localtime())
@@ -49,7 +92,8 @@ def load_config(config_path: str):
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path, "r", encoding="utf-8") as f:
-        return _dict_to_easydict(yaml.safe_load(f))
+        config = _dict_to_easydict(yaml.safe_load(f))
+    return sanitize_runtime_config(config)
 
 
 def prepare_rng(rng_key: int | torch.Generator, tags=("params", "dropout")):

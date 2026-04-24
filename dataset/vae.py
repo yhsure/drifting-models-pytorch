@@ -13,8 +13,7 @@ _vae_cache = {}
 def _get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def vae_enc_decode(replicate_params: bool = True):
-    del replicate_params
+def vae_enc_decode():
     cache_key = ("vae_enc_decode",)
     if cache_key in _vae_cache:
         return _vae_cache[cache_key]
@@ -24,8 +23,7 @@ def vae_enc_decode(replicate_params: bool = True):
     vae.eval()
 
     @torch.inference_mode()
-    def _encode_fn(images, rng=None, model=vae):
-        del rng
+    def _encode_fn(images, model=vae):
         if isinstance(images, np.ndarray):
             images_t = torch.from_numpy(images)
         else:

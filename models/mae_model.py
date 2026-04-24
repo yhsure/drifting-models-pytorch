@@ -12,6 +12,7 @@ from einops import rearrange
 
 from utils.env import HF_REPO_ID, HF_ROOT
 from utils.init_util import load_init_entry
+from utils.misc import maybe_compile, sanitize_model_config
 
 
 def _choose_gn_groups(num_channels: int, max_groups: int = 32) -> int:
@@ -185,8 +186,7 @@ def patch_input(x: torch.Tensor, input_patch_size: int) -> torch.Tensor:
     )
 
 
-def make_patch_mask(x: torch.Tensor, rng, mask_ratio: torch.Tensor, patch_size: int = 4) -> torch.Tensor:
-    del rng
+def make_patch_mask(x: torch.Tensor, mask_ratio: torch.Tensor, patch_size: int = 4) -> torch.Tensor:
     bsz, h, w, _ = x.shape
     nh, nw = h // patch_size, w // patch_size
     noise = torch.rand((bsz, nh, nw), device=x.device, dtype=x.dtype)
@@ -211,7 +211,6 @@ class MAEResNet(nn.Module):
         patch_size: int = 4,
         dropout_prob: float = 0.0,
         layers: Tuple[int, int, int, int] = (2, 2, 2, 2),
-        use_bf16: bool = False,
         input_patch_size: int = 1,
     ):
         super().__init__()
@@ -221,7 +220,6 @@ class MAEResNet(nn.Module):
         self.patch_size = patch_size
         self.dropout_prob = dropout_prob
         self.layers = tuple(layers)
-        self.use_bf16 = use_bf16
         self.input_patch_size = input_patch_size
 
         self.encoder = _ResNetEncoder(
@@ -246,14 +244,12 @@ class MAEResNet(nn.Module):
         mask_ratio_max: float = 0.75,
         train: bool = True,
     ):
-        dtype = torch.bfloat16 if self.use_bf16 else torch.float32
-        x = x.to(dtype)
         labels = labels.long()
 
         x = patch_input(x, self.input_patch_size)
         ratio = torch.rand((x.shape[0],), device=x.device, dtype=torch.float32)
         mask_ratio = ratio * (mask_ratio_max - mask_ratio_min) + mask_ratio_min
-        mask = make_patch_mask(x, None, mask_ratio, self.patch_size).to(x.dtype)
+        mask = make_patch_mask(x, mask_ratio, self.patch_size).to(x.dtype)
         x_in = x * (1.0 - mask)
 
         feats = self.encoder(x_in.permute(0, 3, 1, 2).float(), train=train)
@@ -289,8 +285,6 @@ class MAEResNet(nn.Module):
         patch_mean_size = patch_mean_size or []
         patch_std_size = patch_std_size or []
 
-        dtype = torch.bfloat16 if self.use_bf16 else torch.float32
-        x = x.to(dtype)
         x = patch_input(x, self.input_patch_size)
 
         need_blocks = isinstance(every_k_block, (int, float)) and not math.isinf(float(every_k_block)) and every_k_block >= 1
@@ -372,7 +366,7 @@ def load_mae_hf(
 
 
 def _mae_from_metadata(metadata: Dict[str, Any]) -> MAEResNet:
-    model_config = dict(metadata.get("model_config", {}) or {})
+    model_config = dict(sanitize_model_config(metadata.get("model_config", {}) or {}))
     num_classes = int(model_config.pop("num_classes", 1000))
     return MAEResNet(num_classes=num_classes, **model_config)
 
@@ -384,13 +378,12 @@ MAEResNetJAX = MAEResNet
 def build_feature_model_and_params(
     path: str = "",
     use_convnext: bool = False,
-    convnext_bf16: bool = False,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if use_convnext:
         from models.convnext import load_convnext_torch_model
 
-        model, _ = load_convnext_torch_model(model_name="base", use_bf16=convnext_bf16)
+        model, _ = load_convnext_torch_model(model_name="base")
         model.eval()
         return model, {"model": model}
 
@@ -411,26 +404,26 @@ def build_feature_model_and_params(
 def build_activation_function(
     mae_path: str = "",
     use_convnext=False,
-    convnext_bf16=False,
     use_mae=True,
     postprocess_fn=lambda x: x,
+    compile_level: int = 2,
 ):
     variables = {}
     if use_mae:
         feature_model, feature_params = build_feature_model_and_params(path=mae_path)
+        feature_model.get_activations = maybe_compile(feature_model.get_activations, compile_level)
         variables["mae_model"] = feature_model
         variables["mae_params"] = feature_params
 
     if use_convnext:
         convnext_model, convnext_feature_params = build_feature_model_and_params(
             use_convnext=True,
-            convnext_bf16=convnext_bf16,
         )
+        convnext_model.get_activations = maybe_compile(convnext_model.get_activations, compile_level)
         variables["convnext_model"] = convnext_model
         variables["convnext_params"] = convnext_feature_params
 
-    def activation_fn(params, x, convnext_kwargs=dict(), has_scale=False, **kwargs):
-        del params
+    def activation_fn(x, convnext_kwargs=dict(), has_scale=False, **kwargs):
         usual_feats = {}
         usual_feats["global"] = x.reshape(x.shape[0], 1, -1)
         if has_scale:

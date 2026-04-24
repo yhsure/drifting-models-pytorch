@@ -23,7 +23,7 @@ from utils.fid_util import evaluate_fid
 from utils.hsdp_util import merge_data, set_global_mesh
 from utils.init_util import maybe_init_state_params
 from utils.logging import is_rank_zero, log_for_0
-from utils.misc import load_config, profile_func, run_init, stamp_workdir
+from utils.misc import load_config, maybe_compile, profile_func, run_init, sanitize_train_config, stamp_workdir
 from utils.model_builder import build_model_dict
 
 run_init()
@@ -63,7 +63,6 @@ def train_step(
     negative_samples,
     feature_params,
     feature_apply,
-    rng_init,
     learning_rate_fn: Any = None,
     cfg_min=1.0,
     cfg_max=4.0,
@@ -74,7 +73,6 @@ def train_step(
     loss_kwargs=dict(R_list=[0.02, 0.05, 0.2]),
     max_grad_norm=2.0,
 ):
-    del rng_init
     device = state.device
     labels = labels.to(device=device, dtype=torch.long)
     samples = samples.to(device=device, dtype=torch.float32)
@@ -98,9 +96,9 @@ def train_step(
     neg_samples_input = torch.cat([samples, negative_samples], dim=1)
     neg_samples_input = rearrange(neg_samples_input, "b x h w c -> (b x) h w c")
 
-    with torch.inference_mode():
-        sg_features_raw = feature_apply(feature_params, neg_samples_input, **activation_kwargs)
-    sg_features = {k: rearrange(v, "(b x) ... -> b x ...", b=bsz, x=n_pos + n_uncond) for k, v in sg_features_raw.items()}
+    with torch.no_grad():
+        sg_features_raw = feature_apply(neg_samples_input, **activation_kwargs)
+        sg_features = {k: rearrange(v, "(b x) ... -> b x ...", b=bsz, x=n_pos + n_uncond) for k, v in sg_features_raw.items()}
 
     lr = learning_rate_fn(state.step)
     _set_lr(state.optimizer, lr)
@@ -112,8 +110,8 @@ def train_step(
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
     with torch.autocast("cuda", dtype=torch.bfloat16):
         gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
-    gen_features_raw = feature_apply(feature_params, gen_samples, **activation_kwargs)
-    gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
+        gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
+        gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
     total_loss = torch.tensor(0.0, device=device)
     total_info = {}
@@ -160,8 +158,7 @@ def train_step(
     return state, metric
 
 
-def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
-    del rng
+def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
     _, labels = batch
     if isinstance(params, torch.nn.Module):
         model = params
@@ -218,7 +215,6 @@ def train_gen(
     ),
     max_grad_norm=2.0,
     loss_kwargs=dict(R_list=(0.02, 0.05, 0.2)),
-    keep_every=500000,
     keep_last=2,
     init_from="",
     push_per_step=0,
@@ -226,8 +222,9 @@ def train_gen(
     workdir="runs",
     eval_on_step_one=True,
     run_eval=True,
+    compile_level: int = 2,
 ):
-    del seed, keep_every
+    torch.manual_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     ema_model = copy.deepcopy(model).to(device)
@@ -267,8 +264,8 @@ def train_gen(
 
     assert feature_params is not None, "feature_params must be provided for feature extraction"
 
-    state.model = torch.compile(state.model, dynamic=False, fullgraph=True)
-    state.ema_model = torch.compile(state.ema_model, dynamic=False, fullgraph=True)
+    state.model = maybe_compile(state.model, compile_level)
+    state.ema_model = maybe_compile(state.ema_model, compile_level)
 
     log_for_0("Starting training loop...")
     step = int(state.step)
@@ -323,7 +320,6 @@ def train_gen(
                     n,
                     fp,
                     feature_apply=activation_fn,
-                    rng_init=0,
                     learning_rate_fn=learning_rate_fn,
                     activation_kwargs=activation_kwargs,
                     loss_kwargs=loss_kwargs,
@@ -341,7 +337,6 @@ def train_gen(
             merged_negative,
             feature_params,
             feature_apply=activation_fn,
-            rng_init=0,
             learning_rate_fn=learning_rate_fn,
             activation_kwargs=activation_kwargs,
             loss_kwargs=loss_kwargs,
@@ -384,7 +379,6 @@ def train_gen(
                     gen_func=generate_step,
                     gen_params={
                         "params": state.ema_model,
-                        "rng": 0,
                         "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],  # noqa: E731
                         "cfg_scale": eval_cfg,
                         "postprocess_fn": postprocess_fn,
@@ -394,7 +388,6 @@ def train_gen(
                     num_samples=n_samples,
                     log_folder=f"{folder_prefix}{eval_cfg}",
                     log_prefix=f"EMA_{state.ema_decay:g}",
-                    rng_eval=0,
                 )
                 fid_val = result.get("fid", float("inf"))
                 if fid_val < round_best_fid:
@@ -441,12 +434,13 @@ def main_gen(config, output_dir="runs"):
                 mae_path = f"hf://{model_name}"
     if bool(feature_cfg.get("use_mae", True)) and not mae_path:
         raise ValueError("feature.mae_path (or feature.load_dict.hf_model_name / feature.load_dict.path) is required when use_mae=true.")
+    compile_level = int(config.get("compile", 2))
     activation_fn, variables = build_activation_function(
         mae_path=mae_path,
         use_convnext=bool(feature_cfg.get("use_convnext", False)),
-        convnext_bf16=bool(feature_cfg.get("convnext_bf16", False)),
         use_mae=bool(feature_cfg.get("use_mae", True)),
         postprocess_fn=postprocess_fn_noclip,
+        compile_level=compile_level,
     )
     train_gen(
         model=model_dict.model,
@@ -461,7 +455,8 @@ def main_gen(config, output_dir="runs"):
         activation_fn=activation_fn,
         feature_params=variables,
         workdir=output_dir,
-        **config.train,
+        compile_level=compile_level,
+        **sanitize_train_config(config.train),
     )
 
 

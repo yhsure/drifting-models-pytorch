@@ -10,6 +10,7 @@ dependencies = [
   "einops>=0.8.0",
   "huggingface-hub>=0.24.0",
   "numpy>=1.26.0",
+  "opt-einsum>=3.4.0",
   "Pillow>=10.0.0",
   "pytorch-fid>=0.3.0",
   "PyYAML>=6.0.1",

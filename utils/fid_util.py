@@ -105,9 +105,7 @@ def evaluate_fid(
     eval_prc_recall=False,
     eval_isc=True,
     eval_fid=True,
-    rng_eval=None,
 ):
-    del rng_eval
     start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

@@ -35,7 +35,6 @@ model:
   n_cls_tokens: 16
   noise_classes: 64
   noise_coords: 32
-  use_bf16: true
   checkpointing: true
 
 optimizer:
@@ -53,7 +52,6 @@ train:
   seed: 42
   total_steps: 100000
   save_per_step: 2000
-  keep_every: 50000
   eval_per_step: 5000
   pos_per_sample: 128
   neg_per_sample: 32

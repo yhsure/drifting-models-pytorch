@@ -18,7 +18,7 @@ from utils.env import HF_ROOT
 from utils.hsdp_util import set_global_mesh
 from utils.init_util import maybe_init_state_params
 from utils.logging import is_rank_zero, log_for_0
-from utils.misc import load_config, profile_func, run_init, stamp_workdir
+from utils.misc import load_config, maybe_compile, profile_func, run_init, sanitize_model_config, sanitize_train_config, stamp_workdir
 from utils.model_builder import build_model_dict
 
 
@@ -48,14 +48,11 @@ def train_step(
     state: TrainState,
     batch,
     *,
-    rng_init,
     forward_dict: dict,
-    step_keys=("dropout", "masking"),
     learning_rate_fn: Any,
     preprocess_fn: Any,
     max_grad_norm: float = 2.0,
 ):
-    del rng_init, step_keys
     batch = preprocess_fn(batch)
     batch = {k: v.to(state.device) for k, v in batch.items()}
     forward_kwargs = input_dict(batch)
@@ -91,14 +88,11 @@ def train_step(
 def eval_step(
     params,
     batch,
-    rng_step,
     *,
     apply_fn,
     forward_dict,
-    step_keys=("dropout", "masking"),
     preprocess_fn: Any,
 ):
-    del rng_step, step_keys
     model = apply_fn
     device = next(model.parameters()).device
     batch = preprocess_fn(batch)
@@ -121,10 +115,8 @@ def eval_loop(
     eval_samples=5000,
     forward_dict=None,
     use_ema=False,
-    rng_eval=None,
     ema_to_params_func=lambda x: x,
 ):
-    del rng_eval, ema_to_params_func
     forward_dict = forward_dict or {}
     params = state.ema_model if use_ema else state.model
     if params is None:
@@ -143,7 +135,6 @@ def eval_loop(
         metric = eval_step_func(
             params,
             batch,
-            0,
             forward_dict=dict(forward_dict),
         )
         for k, v in metric.items():
@@ -180,13 +171,13 @@ def train_mae(
     warmup_finetune=1000,
     finetune_cls=0.5,
     max_grad_norm=2.0,
-    keep_every=500000,
     keep_last=2,
     init_from="",
     workdir="runs",
     model_config=None,
+    compile_level: int = 2,
 ):
-    del postprocess_fn, seed, keep_every
+    torch.manual_seed(seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -211,10 +202,12 @@ def train_mae(
             hf_cache_dir=HF_ROOT,
         )
 
-    eval_step_jit = lambda params, batch, rng_step, forward_dict: eval_step(  # noqa: E731
+    state.model = maybe_compile(state.model, compile_level)
+    state.ema_model = maybe_compile(state.ema_model, compile_level)
+
+    eval_step_jit = lambda params, batch, forward_dict: eval_step(  # noqa: E731
         params,
         batch,
-        rng_step,
         apply_fn=params,
         preprocess_fn=preprocess_fn,
         forward_dict=forward_dict,
@@ -249,7 +242,6 @@ def train_mae(
                 lambda s, b, fd: train_step(
                     s,
                     b,
-                    rng_init=0,
                     forward_dict=fd,
                     learning_rate_fn=learning_rate_fn,
                     preprocess_fn=preprocess_fn,
@@ -262,7 +254,6 @@ def train_mae(
         state, metrics = train_step(
             state,
             batch,
-            rng_init=0,
             forward_dict=cur_dict,
             learning_rate_fn=learning_rate_fn,
             preprocess_fn=preprocess_fn,
@@ -350,9 +341,10 @@ def main_mae(config, output_dir="runs"):
         learning_rate_fn=model_dict.learning_rate_fn,
         preprocess_fn=model_dict.preprocess_fn,
         postprocess_fn=model_dict.postprocess_fn,
-        model_config=dict(config.model),
+        model_config=dict(sanitize_model_config(config.model)),
         workdir=output_dir,
-        **config.train,
+        compile_level=int(config.get("compile", 2)),
+        **sanitize_train_config(config.train),
     )
 
 

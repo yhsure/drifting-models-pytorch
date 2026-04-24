@@ -79,7 +79,7 @@ class ConvNextBlock(nn.Module):
 
 
 class ConvNextV2(nn.Module):
-    def __init__(self, model_name: str = "base", dtype: torch.dtype = torch.float32):
+    def __init__(self, model_name: str = "base"):
         super().__init__()
         if model_name == "base":
             load_name = "facebook/convnextv2-base-22k-224"
@@ -91,7 +91,6 @@ class ConvNextV2(nn.Module):
         from transformers import ConvNextV2Model
 
         self.model = ConvNextV2Model.from_pretrained(load_name)
-        self.dtype = dtype
         self.model.eval()
         for p in self.model.parameters():
             p.requires_grad = False
@@ -156,16 +155,15 @@ def convert_weights_to_jax(jax_params: dict, module_pt, hf: bool = False):
     return out if out else jax_params
 
 
-def load_convnext_torch_model(model_name: str = "base", use_bf16: bool = False):
-    dtype = torch.bfloat16 if use_bf16 else torch.float32
-    model = ConvNextV2(model_name=model_name, dtype=dtype)
+def load_convnext_torch_model(model_name: str = "base"):
+    model = ConvNextV2(model_name=model_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     log_for_0("Loaded ConvNeXt model %s", model_name)
     return model, model.state_dict()
 
 
-def load_convnext_jax_model(model_name: str = "base", use_bf16: bool = False):
+def load_convnext_jax_model(model_name: str = "base"):
     """Compatibility alias for JAX-era callsites."""
 
-    return load_convnext_torch_model(model_name=model_name, use_bf16=use_bf16)
+    return load_convnext_torch_model(model_name=model_name)

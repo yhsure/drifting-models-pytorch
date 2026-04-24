@@ -34,7 +34,6 @@ model:
   n_cls_tokens: 4
   noise_classes: 16
   noise_coords: 8
-  use_bf16: false
 
 optimizer:
   lr_schedule:
@@ -51,7 +50,6 @@ train:
   seed: 42
   total_steps: 2
   save_per_step: 100
-  keep_every: 10000
   keep_last: 1
   eval_per_step: 1000
   eval_samples: 16

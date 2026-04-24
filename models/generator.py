@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils.env import HF_REPO_ID, HF_ROOT
+from utils.misc import sanitize_model_config
 
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
@@ -124,8 +125,8 @@ class Attention(nn.Module):
         q, k, v = qkv[:, :, 0], qkv[:, :, 1], qkv[:, :, 2]
 
         if self.qk_norm:
-            q = self.q_norm(q)
-            k = self.k_norm(k)
+            q = F.rms_norm(q, self.q_norm.normalized_shape, weight=self.q_norm.weight.to(q.dtype), eps=self.q_norm.eps)
+            k = F.rms_norm(k, self.k_norm.normalized_shape, weight=self.k_norm.weight.to(k.dtype), eps=self.k_norm.eps)
         if self.use_rope:
             q, k = self.rope(q, k)
 
@@ -199,10 +200,10 @@ class LightningDiTBlock(nn.Module):
     def forward(self, x, c):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
 
-        x_norm = modulate(self.norm1(x), shift_msa, scale_msa)
+        x_norm = modulate(F.rms_norm(x, self.norm1.normalized_shape, weight=self.norm1.weight.to(x.dtype), eps=self.norm1.eps), shift_msa, scale_msa)
         x = x + gate_msa.unsqueeze(1) * self.attn(x_norm)[0]
 
-        x_norm = modulate(self.norm2(x), shift_mlp, scale_mlp)
+        x_norm = modulate(F.rms_norm(x, self.norm2.normalized_shape, weight=self.norm2.weight.to(x.dtype), eps=self.norm2.eps), shift_mlp, scale_mlp)
         x = x + gate_mlp.unsqueeze(1) * self.mlp(x_norm)
         return x
 
@@ -230,7 +231,7 @@ class FinalLayer(nn.Module):
 
     def forward(self, x, c):
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = modulate(self.norm_final(x), shift, scale)
+        x = modulate(F.rms_norm(x, self.norm_final.normalized_shape, weight=self.norm_final.weight.to(x.dtype), eps=self.norm_final.eps), shift, scale)
         return self.linear(x)
 
 
@@ -384,7 +385,6 @@ class DitGen(nn.Module):
         use_swiglu: bool = False,
         use_rope: bool = False,
         use_rmsnorm: bool = False,
-        use_bf16: bool = False,
         checkpointing: bool = False,
     ):
         super().__init__()
@@ -405,7 +405,6 @@ class DitGen(nn.Module):
         self.use_swiglu = use_swiglu
         self.use_rope = use_rope
         self.use_rmsnorm = use_rmsnorm
-        self.use_bf16 = use_bf16
         self.checkpointing = checkpointing
         self.model_config = {
             "cond_dim": cond_dim,
@@ -425,7 +424,6 @@ class DitGen(nn.Module):
             "use_swiglu": use_swiglu,
             "use_rope": use_rope,
             "use_rmsnorm": use_rmsnorm,
-            "use_bf16": use_bf16,
             "checkpointing": checkpointing,
         }
 
@@ -479,11 +477,10 @@ class DitGen(nn.Module):
             if cfg_scale_t.ndim == 0:
                 cfg_scale_t = cfg_scale_t.unsqueeze(0).repeat(bsz)
         cfg_scale_t = self.cfg_embedder(cfg_scale_t)
-        cfg_scale_t = self.cfg_norm(cfg_scale_t.float()).to(cfg_scale_t.dtype)
+        cfg_scale_t_normalized = F.rms_norm(cfg_scale_t, self.cfg_norm.normalized_shape, weight=self.cfg_norm.weight.to(cfg_scale_t.dtype), eps=self.cfg_norm.eps)
+        cfg_scale_t = cfg_scale_t_normalized.to(cond.dtype)
         cond = cond + cfg_scale_t * 0.02
 
-        if self.use_bf16:
-            cond = cond.to(torch.bfloat16)
         return cond
 
     def forward(self, c, cfg_scale=1.0, temp=1.0):
@@ -491,9 +488,7 @@ class DitGen(nn.Module):
         device = c.device
 
         x = torch.randn((bsz, self.input_size, self.input_size, self.in_channels), device=device, dtype=torch.float32)
-        x = x * float(temp)
-        if self.use_bf16:
-            x = x.to(torch.bfloat16)
+        x = x * temp
 
         noise_labels = torch.randint(
             low=0,
@@ -515,7 +510,8 @@ class DitGen(nn.Module):
 
 
 def build_generator_from_config(model_config: Dict[str, Any]) -> DitGen:
-    return DitGen(**dict(model_config))
+    cfg = dict(sanitize_model_config(model_config))
+    return DitGen(**cfg)
 
 
 def load_hf(

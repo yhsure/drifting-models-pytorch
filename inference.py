@@ -40,8 +40,7 @@ def _load_model(init_from: str):
     return model, postprocess_fn, metadata, device
 
 
-def generate_step(batch, params, rng, apply_fn, postprocess_fn, cfg_scale=1.0):
-    del rng
+def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
     _, labels = batch
     model = params if isinstance(params, torch.nn.Module) else params["model"]
     device = next(model.parameters()).device
@@ -98,7 +97,6 @@ def run_eval_fid(
         gen_func=generate_step,
         gen_params={
             "params": params,
-            "rng": 0,
             "apply_fn": apply_fn,
             "cfg_scale": cfg_scale,
             "postprocess_fn": postprocess_fn,
@@ -111,7 +109,6 @@ def run_eval_fid(
         eval_prc_recall=(num_samples >= 50000),
         eval_isc=True,
         eval_fid=True,
-        rng_eval=0,
     )
     logger.finish()
     return {"init_from": init_from, "cfg_scale": cfg_scale, "metadata": metadata, **metrics}

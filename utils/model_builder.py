@@ -4,7 +4,7 @@ import torch
 
 from dataset.dataset import create_imagenet_split
 from utils.logging import WandbLogger
-from utils.misc import EasyDict
+from utils.misc import EasyDict, sanitize_model_config, sanitize_train_config
 
 
 def create_learning_rate_fn(
@@ -48,9 +48,10 @@ def create_learning_rate_fn(
 
 def build_model_dict(config, model_class, *, workdir: str = "runs"):
     print("Building model...")
+    model_config = sanitize_model_config(config.model)
     model = model_class(
         num_classes=config.dataset.num_classes,
-        **config.model,
+        **model_config,
     )
 
     print("Building dataset...")
@@ -115,7 +116,7 @@ def build_model_dict(config, model_class, *, workdir: str = "runs"):
         dataset_name=f"imagenet{resolution}",
         preprocess_fn=preprocess_fn,
         postprocess_fn=postprocess_fn,
-        train=config.train,
+        train=sanitize_train_config(config.train),
         learning_rate_fn=learning_rate_fn,
         feature=config.get("feature", {}),
     )

@@ -89,13 +89,9 @@ def init_state_from_dummy_input(
     model,
     optimizer,
     TrainState,
-    rng,
-    dummy_input: dict,
-    rng_keys_extra: Sequence[str] = (),
     ema_decay=0.999,
     **_unused_kwargs,
 ):
-    del rng, dummy_input, rng_keys_extra
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     ema_model = copy.deepcopy(model).to(device)
@@ -120,11 +116,7 @@ def map_to_sharding(params):
 
 def init_model_distributed(
     model,
-    dummy_input: Dict[str, Any],
-    rng: int | None = None,
-    rng_keys_extra: Sequence[str] = (),
 ) -> Tuple[Any, Dict[str, int]]:
-    del dummy_input, rng, rng_keys_extra
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     return model.state_dict(), get_global_mesh()

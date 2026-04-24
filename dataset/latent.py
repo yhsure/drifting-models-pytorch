@@ -113,9 +113,7 @@ def create_cached_dataset(
     num_workers: int = 8,
     prefetch_factor: int = 2,
     pin_memory: bool = False,
-    save_workers: int = 0,
 ) -> None:
-    del save_workers
     encode_fn, _ = vae_enc_decode()
 
     Path(target_path, "train").mkdir(parents=True, exist_ok=True)
@@ -179,7 +177,6 @@ def build_cache_from_args(args: argparse.Namespace) -> None:
         num_workers=int(args.num_workers),
         prefetch_factor=int(args.prefetch_factor),
         pin_memory=bool(args.pin_memory),
-        save_workers=int(args.save_workers),
     )
 
 

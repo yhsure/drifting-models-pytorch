@@ -25,7 +25,6 @@ model:
   dropout_prob: 0.0
   layers: [3, 4, 6, 3]
   in_channels: 4
-  use_bf16: true
   input_patch_size: 1
 
 optimizer:
@@ -53,7 +52,6 @@ train:
     mask_ratio_max: 0.5
     lambda_cls: 0.0
   ema_decay: 0.9995
-  keep_every: 500000
   keep_last: 2
   finetune_last_steps: 0
   warmup_finetune: 1000
