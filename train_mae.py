@@ -176,6 +176,7 @@ def train_mae(
     workdir="runs",
     model_config=None,
     compile_level: int = 2,
+    profile: bool = False,
 ):
     torch.manual_seed(seed)
 
@@ -192,7 +193,9 @@ def train_mae(
         device=device,
     )
 
+    log_for_0("Restoring checkpoint from %s", workdir)
     state = restore_checkpoint(state=state, workdir=workdir)
+    log_for_0("Checkpoint restored (step=%d)", int(state.step))
     if int(state.step) == 0 and init_from:
         log_for_0("Initializing MAE params from init_from=%s", init_from)
         state = maybe_init_state_params(
@@ -237,7 +240,7 @@ def train_mae(
             cur_dict["lambda_cls"] = finetune_cls * min(1.0, (step - start_finetune_step) / max(1, warmup_finetune))
 
         profile_metrics = {}
-        if step == initial_step:
+        if profile and step == initial_step:
             profile_metrics = profile_func(
                 lambda s, b, fd: train_step(
                     s,
@@ -325,13 +328,15 @@ def train_mae(
     gc.collect()
 
 
-def main_mae(config, output_dir="runs"):
+def main_mae(config, output_dir="runs", profile=False):
     set_global_mesh(config.get("hsdp_dim", 1))
     if "logging" not in config:
         config.logging = {}
     config.logging.name = Path(output_dir).resolve().name
 
+    log_for_0("Building model...")
     model_dict = build_model_dict(config, MAEResNet, workdir=output_dir)
+    log_for_0("Model built.")
     train_mae(
         model=model_dict.model,
         optimizer=model_dict.optimizer,
@@ -344,19 +349,21 @@ def main_mae(config, output_dir="runs"):
         model_config=dict(sanitize_model_config(config.model)),
         workdir=output_dir,
         compile_level=int(config.get("compile", 2)),
+        profile=profile,
         **sanitize_train_config(config.train),
     )
 
 
 def main(args):
     config = load_config(args.config)
-    main_mae(config, output_dir=args.workdir)
+    main_mae(config, output_dir=args.workdir, profile=args.profile)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to MAE config.")
     parser.add_argument("--workdir", type=str, default="runs", help="Local workdir root for checkpoints/logs.")
+    parser.add_argument("--profile", action="store_true", default=False, help="Run profiling on the first training step.")
     args = parser.parse_args()
     args.workdir = stamp_workdir(args.workdir)
     args.output_dir = args.workdir
