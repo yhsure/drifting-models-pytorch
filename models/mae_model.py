@@ -34,14 +34,14 @@ class _BasicBlock(nn.Module):
         super().__init__()
         in_channels = int(in_channels if in_channels is not None else filters)
         self.conv1 = nn.Conv2d(in_channels, filters, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.gn1 = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters)
+        self.gn1 = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters, eps=1e-6)
         self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1, bias=False)
-        self.gn2 = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters)
+        self.gn2 = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters, eps=1e-6)
         self.drop = nn.Dropout(dropout_prob)
 
         if stride != 1 or in_channels != filters:
             self.proj_conv = nn.Conv2d(in_channels, filters, kernel_size=1, stride=stride, bias=False)
-            self.proj_gn = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters)
+            self.proj_gn = nn.GroupNorm(_choose_gn_groups(filters, gn_max_groups), filters, eps=1e-6)
         else:
             self.proj_conv = None
             self.proj_gn = None
@@ -73,7 +73,7 @@ class _ResNetEncoder(nn.Module):
     ):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1, bias=False)
-        self.gn1 = nn.GroupNorm(_choose_gn_groups(base_channels, gn_max_groups), base_channels)
+        self.gn1 = nn.GroupNorm(_choose_gn_groups(base_channels, gn_max_groups), base_channels, eps=1e-6)
 
         self.stages = nn.ModuleList()
         self.stage_norms = nn.ModuleList()
@@ -95,7 +95,7 @@ class _ResNetEncoder(nn.Module):
             for _ in range(1, num_blocks):
                 blocks.append(_BasicBlock(out_ch, in_channels=out_ch, stride=1, dropout_prob=dropout_prob))
             self.stages.append(nn.ModuleList(blocks))
-            self.stage_norms.append(nn.GroupNorm(_choose_gn_groups(out_ch, gn_max_groups), out_ch))
+            self.stage_norms.append(nn.GroupNorm(_choose_gn_groups(out_ch, gn_max_groups), out_ch, eps=1e-6))
             in_ch = out_ch
 
     def forward(self, x: torch.Tensor, *, train: bool, return_block_outputs: bool = False):
@@ -126,7 +126,7 @@ class _ConvGNReLU(nn.Module):
     def __init__(self, channels: int, kernel: int = 3):
         super().__init__()
         self.conv = nn.Conv2d(channels, channels, kernel_size=kernel, padding=kernel // 2, bias=False)
-        self.gn = nn.GroupNorm(_choose_gn_groups(channels, 32), channels)
+        self.gn = nn.GroupNorm(_choose_gn_groups(channels, 32), channels, eps=1e-6)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return F.relu(self.gn(self.conv(x)))
@@ -135,10 +135,10 @@ class _ConvGNReLU(nn.Module):
 class _UpBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
-        self.concat_norm_fn = nn.GroupNorm(_choose_gn_groups(in_channels, 32), in_channels)
+        self.concat_norm_fn = nn.GroupNorm(_choose_gn_groups(in_channels, 32), in_channels, eps=1e-6)
         self.proj = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.GroupNorm(_choose_gn_groups(out_channels, 32), out_channels),
+            nn.GroupNorm(_choose_gn_groups(out_channels, 32), out_channels, eps=1e-6),
             nn.ReLU(inplace=True),
         )
         self.refine = _ConvGNReLU(out_channels, kernel=3)
