@@ -1,6 +1,6 @@
 # Slurm Scripts
 
-`common.sh` contains shared setup used by all jobs (module load, `uv sync`, workspace-root caches: `uv`, torch inductor, `TORCH_HOME`, `HF_ROOT`, and JSC network env: `MASTER_ADDR`, `MASTER_PORT`, `NCCL_SOCKET_IFNAME=ib0`, `GLOO_SOCKET_IFNAME=ib0`).
+`common.sh` contains shared setup used by all jobs (module load, `uv sync`, workspace-root caches: `uv`, torch inductor, `TORCH_HOME`, `HF_ROOT`, offline WandB, and JSC network env: `MASTER_ADDR`, `MASTER_PORT`, `NCCL_SOCKET_IFNAME=ib0`, `GLOO_SOCKET_IFNAME=ib0`).
 
 Submit from the repository root: Slurm copies the batch script to spool, so the job uses `SLURM_SUBMIT_DIR` as the repo path. Scripts use `--exclusive`, `--cpus-per-task=288`, and no `--gres`.
 
@@ -16,3 +16,20 @@ sbatch scripts/slurm/gen_2node_smoke.sbatch
 ```
 
 If `--exclusive` is rejected by your partition, add the site-specific GPU line your center documents.
+
+## Offline WandB sync
+
+Compute nodes do not have internet access, so configs that set `logging.use_wandb: true` should keep `logging.mode: offline` or rely on `common.sh`'s default `WANDB_MODE=offline`. Offline WandB folders are written inside each stamped run directory, next to checkpoints and local `log/` files.
+
+Run sync from a login node:
+
+```bash
+cd /e/project1/e-dev-2026d02-064/_abj/torch-port/drifting-models-pytorch
+uv sync --group dev
+.venv/bin/wandb login
+tmux new -s drift_wandb_sync './scripts/wandb_sync_offline.sh'
+```
+
+Stop the sync loop with `tmux kill-session -t drift_wandb_sync` on the same login node where it was started.
+
+The helper recursively finds `runs/**/wandb/offline-run-*`. If using the JSC AI recipe daemon directly, monitor a specific run's `wandb/` folder or adapt the daemon to scan recursively.

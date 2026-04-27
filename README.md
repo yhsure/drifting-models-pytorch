@@ -51,6 +51,60 @@ uv run python main.py --config configs/dev/smoke_mae.yaml --workdir runs/smoke_m
 uv run python main.py --gen --config configs/dev/smoke_gen.yaml --workdir runs/smoke_gen
 ```
 
+## Logging and WandB on Jupiter
+
+Every run writes local tracking files under its stamped workdir:
+
+- `log/run.json`: run name, run id, Slurm/WandB environment snapshot, host, and sync path
+- `log/config.yaml`: resolved training config
+- `log/metrics.jsonl`: rank-zero scalar metrics, mirrored locally even when WandB is enabled
+- `log/images/`: image grids, mirrored locally even when WandB is enabled
+
+On Booster compute nodes, WandB should be used in offline mode. Slurm jobs source `scripts/slurm/common.sh`, which sets:
+
+```bash
+export WANDB_MODE=offline
+export WANDB_PROJECT=drift
+export WANDB_ENTITY=ucph-dk
+```
+
+With this layout, one stamped run directory owns the training state, local metrics, images, config snapshot, and WandB offline folder:
+
+```text
+runs/0427_1530_my_experiment/
+  checkpoint files...
+  log/
+    run.json
+    config.yaml
+    metrics.jsonl
+    images/
+  wandb/
+    offline-run-...
+```
+
+To enable WandB for a config, set:
+
+```yaml
+logging:
+  project: "YOUR_WANDB_PROJECT"
+  entity: "YOUR_WANDB_ENTITY"
+  use_wandb: true
+  mode: "offline"
+  log_every_k: 10
+```
+
+Sync offline runs from a login node, not from a compute node:
+
+```bash
+uv sync --group dev
+.venv/bin/wandb login
+tmux new -s drift_wandb_sync './scripts/wandb_sync_offline.sh'
+```
+
+Stop the sync loop with `tmux kill-session -t drift_wandb_sync` on the same login node where it was started.
+
+The sync helper recursively finds `runs/**/wandb/offline-run-*`. If you use the JSC recipe daemon instead, point it at the specific `wandb/` folder for the run you want to sync, or adapt its watched folder to scan recursively. The recipe is designed for the same cluster pattern: write offline WandB folders on compute nodes, then synchronize them from login nodes with internet access.
+
 ## Paths
 
 Runtime paths are configured in `utils/env.py` and can be overridden by environment variables:
