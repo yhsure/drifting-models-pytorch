@@ -1,5 +1,5 @@
 hsdp_dim: 8
-compile: 0
+compile: 2
 
 logging:
   project: "YOUR_WANDB_PROJECT"
