@@ -23,10 +23,23 @@ function drift_export_env() {
   export HF_ROOT="${HF_HOME}"
   export HF_HUB_CACHE="${HF_HOME}/hub"
   export DRIFT_SDVAE_PATH="${DRIFT_SDVAE_PATH:-${HF_HUB_CACHE}/models--stabilityai--sd-vae-ft-mse/snapshots/31f26fdeee1355a5c34592e401dd41e45d25a493}"
+  export WANDB_MODE="${WANDB_MODE:-offline}"
+  export WANDB_PROJECT="${WANDB_PROJECT:-drift}"
+  export WANDB_ENTITY="${WANDB_ENTITY:-ucph-dk}"
+  export WANDB_CACHE_DIR="${WANDB_CACHE_DIR:-${cache_root}/wandb}"
+  export WANDB_CONFIG_DIR="${WANDB_CONFIG_DIR:-${WORKSPACE_ROOT}/.config/wandb}"
   # Keep transformers on HF_HOME/HF_HUB_CACHE path
   unset TRANSFORMERS_CACHE
 
-  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_HOME}" "${HF_HUB_CACHE}" "${REPO_ROOT}/logs/slurm"
+  mkdir -p \
+    "${UV_CACHE_DIR}" \
+    "${TORCHINDUCTOR_CACHE_DIR}" \
+    "${TORCH_HOME}" \
+    "${HF_HOME}" \
+    "${HF_HUB_CACHE}" \
+    "${WANDB_CACHE_DIR}" \
+    "${WANDB_CONFIG_DIR}" \
+    "${REPO_ROOT}/logs/slurm"
 }
 
 function drift_export_dist_env() {
