@@ -13,20 +13,23 @@ function drift_load_modules() {
 function drift_export_env() {
   export PYTHONUNBUFFERED=1
 
-  local cache_root="${DRIFT_CACHE_ROOT:-${WORKSPACE_ROOT}/.cache}"
-  local hf_home="${DRIFT_HF_HOME:-${WORKSPACE_ROOT}/hf_cache}"
+  local cache_root="${DRIFT_CACHE_ROOT:-${SCRATCH:-${WORKSPACE_ROOT}}/.cache}"
+  local hf_home="${DRIFT_HF_HOME:-${SCRATCH:-${WORKSPACE_ROOT}}/hf_cache}"
 
-  export UV_CACHE_DIR="${cache_root}/uv"
-  export TORCHINDUCTOR_CACHE_DIR="${cache_root}/torchinductor"
-  export TORCH_HOME="${cache_root}/torch"
-  export HF_HOME="${hf_home}"
-  export HF_ROOT="${HF_HOME}"
-  export HF_HUB_CACHE="${HF_HOME}/hub"
-  export DRIFT_SDVAE_PATH="${DRIFT_SDVAE_PATH:-${HF_HUB_CACHE}/models--stabilityai--sd-vae-ft-mse/snapshots/31f26fdeee1355a5c34592e401dd41e45d25a493}"
+  export HF_HUB_OFFLINE=1
+  export HF_DATASETS_OFFLINE=1
+
+  # export UV_CACHE_DIR="${cache_root}/uv"
+  # export TORCHINDUCTOR_CACHE_DIR="${cache_root}/torchinductor"
+  # export TORCH_HOME="${cache_root}/torch"
+  # export HF_HOME="${hf_home}"
+  # export HF_ROOT="${HF_HOME}"
+  # export HF_HUB_CACHE="${HF_HOME}/hub"
+  # export DRIFT_SDVAE_PATH="${DRIFT_SDVAE_PATH:-${HF_HUB_CACHE}/models--stabilityai--sd-vae-ft-mse/snapshots/31f26fdeee1355a5c34592e401dd41e45d25a493}"
   # Keep transformers on HF_HOME/HF_HUB_CACHE path
-  unset TRANSFORMERS_CACHE
+  # unset TRANSFORMERS_CACHE
 
-  mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_HOME}" "${HF_HUB_CACHE}" "${REPO_ROOT}/logs/slurm"
+  # mkdir -p "${UV_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" "${TORCH_HOME}" "${HF_HOME}" "${HF_HUB_CACHE}" "${REPO_ROOT}/logs/slurm"
 }
 
 function drift_export_dist_env() {
