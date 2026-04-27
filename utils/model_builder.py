@@ -1,10 +1,32 @@
 from pathlib import Path
+from typing import Optional
 
 import torch
 
 from dataset.dataset import create_imagenet_split
 from utils.logging import WandbLogger
 from utils.misc import EasyDict, sanitize_model_config, sanitize_train_config
+
+
+def _build_optimi_optimizer(model, optimizer_config, initial_lr: float):
+    from optimi import AdamW as OptimiAdamW, StableAdamW as OptimiStableAdamW
+    from optimi.utils import param_groups_weight_decay
+
+    optimizer_type = str(optimizer_config.get("optimizer_type", "optimi_adamw")).lower()
+    weight_decay = float(optimizer_config.get("weight_decay", 0.0))
+    no_weight_decay_layers = list(optimizer_config.get("no_weight_decay_layers", []))
+    betas = (float(optimizer_config.adam_b1), float(optimizer_config.adam_b2))
+    gradient_release = bool(optimizer_config.get("gradient_release", False))
+
+    params = param_groups_weight_decay(model, weight_decay=weight_decay, additional_layers=no_weight_decay_layers)
+
+    kwargs = dict(lr=initial_lr, betas=betas, gradient_release=gradient_release)
+    triton = optimizer_config.get("triton", None)
+    if triton is not None:
+        kwargs["triton"] = bool(triton)
+
+    cls = OptimiStableAdamW if optimizer_type == "optimi_stableadamw" else OptimiAdamW
+    return cls(params, **kwargs)
 
 
 def create_learning_rate_fn(
@@ -87,12 +109,26 @@ def build_model_dict(config, model_class, *, workdir: str = "runs"):
 
     learning_rate_fn = create_learning_rate_fn(**config.optimizer.lr_schedule)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=learning_rate_fn(0),
-        weight_decay=float(config.optimizer.get("weight_decay", 0.0)),
-        betas=(float(config.optimizer.adam_b1), float(config.optimizer.adam_b2)),
-    )
+    optimizer_type = str(config.optimizer.get("optimizer_type", "pytorch_adamw")).lower()
+    low_precision_model = bool(config.optimizer.get("low_precision_model", False)) and optimizer_type != "pytorch_adamw"
+    if low_precision_model:
+        from optimi.utils import to_low_precision
+        from models.generator import RotaryEmbedding
+        fp32_modules = (torch.nn.LayerNorm, torch.nn.RMSNorm, torch.nn.Embedding, RotaryEmbedding)
+        to_low_precision(model, dtype=torch.bfloat16, fp32_modules=fp32_modules)
+
+    if optimizer_type == "pytorch_adamw":
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=learning_rate_fn(0),
+            weight_decay=float(config.optimizer.get("weight_decay", 0.0)),
+            betas=(float(config.optimizer.adam_b1), float(config.optimizer.adam_b2)),
+        )
+    else:
+        optimizer = _build_optimi_optimizer(model, config.optimizer, initial_lr=learning_rate_fn(0))
+        if bool(config.optimizer.get("gradient_release", False)):
+            from optimi import prepare_for_gradient_release
+            prepare_for_gradient_release(model, optimizer)
 
     logger = WandbLogger()
     w_cfg = EasyDict(dict(config.get("logging", {})))
@@ -119,4 +155,6 @@ def build_model_dict(config, model_class, *, workdir: str = "runs"):
         train=sanitize_train_config(config.train),
         learning_rate_fn=learning_rate_fn,
         feature=config.get("feature", {}),
+        gradient_release=bool(config.optimizer.get("gradient_release", False)) and optimizer_type != "pytorch_adamw",
+        skip_grad_clip=optimizer_type == "optimi_stableadamw",
     )

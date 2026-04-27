@@ -21,6 +21,17 @@ def resolve_artifact_dir(path: str) -> Path:
     return base
 
 def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
+    p = Path(path).resolve()
+    if p.is_file() and p.suffix == ".pt":
+        metadata: Dict[str, Any] = {}
+        json_path = p.with_suffix(".json")
+        if json_path.is_file():
+            metadata = json.loads(json_path.read_text(encoding="utf-8"))
+        restored = torch.load(p, map_location="cpu", weights_only=False)
+        if isinstance(restored, dict) and "model" in restored:
+            return restored["model"], metadata
+        return restored, metadata
+
     artifact_dir = resolve_artifact_dir(path)
     metadata_path = artifact_dir / "metadata.json"
     params_path = artifact_dir / "ema_params.pt"
@@ -105,6 +116,7 @@ def load_generator_model_and_params(
     init_from: str,
     *,
     hf_cache_dir: str = HF_ROOT,
+    model_config: Dict[str, Any] | None = None,
 ) -> Tuple[Any, Any, Dict[str, Any]]:
     if not init_from:
         raise ValueError("`init_from` is empty.")
@@ -117,11 +129,11 @@ def load_generator_model_and_params(
         return model, params, metadata
 
     params, metadata = _load_local_init_entry(init_from)
-    model_cfg = dict(metadata.get("model_config", {}) or {})
+    model_cfg = dict(metadata.get("model_config", {}) or {}) or dict(model_config or {})
     if not model_cfg:
         raise ValueError(
             f"missing metadata.model_config: local artifact at {Path(init_from).resolve()} "
-            "cannot be restored without model_config in metadata.json"
+            "cannot be restored without model_config in metadata.json — pass --config to supply one"
         )
     from models.generator import build_generator_from_config
 

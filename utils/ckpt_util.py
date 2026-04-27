@@ -80,7 +80,7 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
     return state
 
 
-def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
+def save_checkpoint(state, keep=2, workdir: Optional[str] = None, model_config: Optional[Dict[str, Any]] = None):
     if not _is_rank_zero():
         return
     ckpt_dir = _job_ckpt_dir(workdir=workdir)
@@ -93,22 +93,29 @@ def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
     else:
         ema_payload = None
 
+    step = _to_python_int(state.step)
     payload = {
-        "step": _to_python_int(state.step),
+        "step": step,
         "model": _strip_compiled_prefix(state.model.state_dict()),
         "ema_model": _strip_compiled_prefix(ema_payload) if ema_payload is not None else None,
         "ema_params": _strip_compiled_prefix(ema_payload) if ema_payload is not None else None,
         "optimizer": state.optimizer.state_dict() if state.optimizer is not None else None,
         "ema_decay": float(state.ema_decay),
     }
-    out = ckpt_dir / _ckpt_name(_to_python_int(state.step))
+    stem = f"step_{step:09d}"
+    out = ckpt_dir / f"{stem}.pt"
     torch.save(payload, out)
-    log_for_0("Saving checkpoint step %d to %s", _to_python_int(state.step), str(out))
+    log_for_0("Saving checkpoint step %d to %s", step, str(out))
+
+    if model_config:
+        meta = {"step": step, "model_config": dict(model_config)}
+        (ckpt_dir / f"{stem}.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
     ckpts = sorted(ckpt_dir.glob("step_*.pt"))
     if keep is not None and keep > 0 and len(ckpts) > keep:
         for p in ckpts[: len(ckpts) - keep]:
             p.unlink(missing_ok=True)
+            p.with_suffix(".json").unlink(missing_ok=True)
 
 
 def save_params_ema_artifact(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import gc
 import os
@@ -65,6 +66,15 @@ def _unwrap_model(model):
     return model.module if hasattr(model, "module") else model
 
 
+def _autocast_ctx(autocast_dtype: Optional[str]):
+    if not autocast_dtype or autocast_dtype.lower() in ("none", "float32", "fp32"):
+        return contextlib.nullcontext()
+    dtype = getattr(torch, autocast_dtype, None)
+    if dtype is None:
+        raise ValueError(f"Unknown autocast dtype: {autocast_dtype!r}")
+    return torch.autocast("cuda", dtype=dtype)
+
+
 def _generator_model_config(model) -> dict:
     model = _unwrap_model(model)
     if hasattr(model, "model_config"):
@@ -93,6 +103,8 @@ def train_step(
     activation_kwargs=dict(),
     loss_kwargs=dict(R_list=[0.02, 0.05, 0.2]),
     max_grad_norm=2.0,
+    autocast_dtype: Optional[str] = "bfloat16",
+    skip_grad_clip: bool = False,
 ):
     device = state.device
     labels = labels.to(device=device, dtype=torch.long)
@@ -129,7 +141,7 @@ def train_step(
 
     input_labels = repeat(labels, "b -> (b g)", g=gen_per_label)
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
-    with torch.autocast("cuda", dtype=torch.bfloat16):
+    with _autocast_ctx(autocast_dtype):
         gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
         gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
         gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
@@ -164,7 +176,10 @@ def train_step(
             total_info[f"{k2}/{k}"] = float(v2.detach().cpu().item())
 
     total_loss.backward()
-    g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
+    if skip_grad_clip:
+        g_norm = float("nan")
+    else:
+        g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
     state.optimizer.step()
 
     with torch.inference_mode():
@@ -180,7 +195,7 @@ def train_step(
     return state, metric
 
 
-def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
+def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0, autocast_dtype: Optional[str] = "bfloat16"):
     _, labels = batch
     if isinstance(params, torch.nn.Module):
         model = params
@@ -192,7 +207,7 @@ def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
         apply_fn = lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"]  # noqa: E731
     if isinstance(model, torch.nn.Module):
         model.eval()
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+    with torch.inference_mode(), _autocast_ctx(autocast_dtype):
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
 
@@ -246,6 +261,9 @@ def train_gen(
     run_eval=True,
     compile_level: int = 2,
     profile: bool = False,
+    autocast_dtype: Optional[str] = "bfloat16",
+    gradient_release: bool = False,
+    skip_grad_clip: bool = False,
 ):
     torch.manual_seed(seed)
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -364,6 +382,8 @@ def train_gen(
                     activation_kwargs=activation_kwargs,
                     loss_kwargs=loss_kwargs,
                     max_grad_norm=max_grad_norm,
+                    autocast_dtype=autocast_dtype,
+                    skip_grad_clip=skip_grad_clip,
                     **forward_dict,
                 ),
                 (state, merged_labels, merged_positive, merged_negative, feature_params),
@@ -381,6 +401,8 @@ def train_gen(
             activation_kwargs=activation_kwargs,
             loss_kwargs=loss_kwargs,
             max_grad_norm=max_grad_norm,
+            autocast_dtype=autocast_dtype,
+            skip_grad_clip=skip_grad_clip,
             **forward_dict,
         )
 
@@ -395,7 +417,7 @@ def train_gen(
 
         now_step = step + 1
         if now_step % save_per_step == 0 or now_step == total_steps:
-            save_checkpoint(state, keep=keep_last, workdir=workdir)
+            save_checkpoint(state, keep=keep_last, workdir=workdir, model_config=_generator_model_config(model))
             save_params_ema_artifact(
                 state,
                 workdir=workdir,
@@ -426,6 +448,7 @@ def train_gen(
                         "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"],  # noqa: E731
                         "cfg_scale": eval_cfg,
                         "postprocess_fn": postprocess_fn,
+                        "autocast_dtype": autocast_dtype,
                     },
                     eval_loader=eval_loader,
                     logger=logger if _rank() == 0 else None,
@@ -509,6 +532,8 @@ def main_gen(config, output_dir="runs", profile=False):
         workdir=output_dir,
         compile_level=compile_level,
         profile=profile,
+        gradient_release=bool(model_dict.get("gradient_release", False)),
+        skip_grad_clip=bool(model_dict.get("skip_grad_clip", False)),
         **sanitize_train_config(config.train),
     )
 

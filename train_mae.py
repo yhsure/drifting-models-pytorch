@@ -315,7 +315,7 @@ def train_mae(
 
         now_step = step + 1
         if (now_step in [total_steps, start_finetune_step]) or (now_step % save_per_step == 0 and now_step < start_finetune_step):
-            save_checkpoint(state, keep=keep_last, workdir=workdir)
+            save_checkpoint(state, keep=keep_last, workdir=workdir, model_config=model_config)
             save_params_ema_artifact(
                 state,
                 workdir=workdir,

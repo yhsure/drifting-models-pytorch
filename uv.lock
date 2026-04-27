@@ -279,6 +279,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scipy" },
     { name = "torch" },
+    { name = "torch-optimi" },
     { name = "torchmetrics", extra = ["image"] },
     { name = "torchrun-jsc" },
     { name = "torchvision" },
@@ -308,6 +309,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "scipy", specifier = ">=1.13.0" },
     { name = "torch", specifier = ">=2.11.0,<2.12" },
+    { name = "torch-optimi", specifier = ">=0.3.3" },
     { name = "torchmetrics", extras = ["image"], specifier = ">=1.4.0" },
     { name = "torchrun-jsc", specifier = ">=0.0.19" },
     { name = "torchvision", specifier = ">=0.26.0,<0.27" },
@@ -1635,6 +1637,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/32/37/94e4d31a157bae81622557b7f94f93ca3749e6b592203633858dbca8c835/torch_fidelity-0.4.0.tar.gz", hash = "sha256:73548b97f1a844cb94dee7736c8485cbf1e5ae43670679f62ffb7bbb8bb3d455", size = 1349034, upload-time = "2026-02-17T21:04:57.976Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/27/35/e0988c963538d155befe1c4e1b90ff2925eaa40acc27fb2bba737dcb7288/torch_fidelity-0.4.0-py3-none-any.whl", hash = "sha256:99f4c610ea16972628eceb26afb0008e528da2d44123db947b408750efbd35d4", size = 85594, upload-time = "2026-02-17T21:04:56.166Z" },
+]
+
+[[package]]
+name = "torch-optimi"
+version = "0.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/41/a963a8cbfcfaa320556daf78a0951f96aa3d3938f7fcc812b7ca78de9c48/torch_optimi-0.3.3.tar.gz", hash = "sha256:e8a0024b22a243154f4882d781064256f84e80f24dd15fab9e11156b493c589e", size = 26144, upload-time = "2025-12-26T22:36:55.358Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/db/dd0d8aceaa1b3fe0642619914d1d9d2452cd9a29f1de66eb9bb185119ae4/torch_optimi-0.3.3-py3-none-any.whl", hash = "sha256:1ab11f4b9cb82f6fb5e3e0725c8df2bab53bbede023f0f784e221c3c15805696", size = 50559, upload-time = "2025-12-26T22:36:53.602Z" },
 ]
 
 [[package]]

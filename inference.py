@@ -17,7 +17,7 @@ from utils.env import HF_ROOT
 from utils.fid_util import evaluate_fid
 from utils.init_util import load_generator_model_and_params
 from utils.logging import WandbLogger
-from utils.misc import run_init, stamp_workdir
+from utils.misc import load_config, run_init, sanitize_model_config, stamp_workdir
 
 run_init()
 
@@ -27,15 +27,18 @@ def _is_latent(metadata: dict) -> bool:
     return model_cfg.get("in_channels", 3) == 4
 
 
-def _load_model(init_from: str):
-    model, params, metadata = load_generator_model_and_params(init_from, hf_cache_dir=HF_ROOT)
+def _load_model(init_from: str, model_config: dict | None = None):
+    model, params, metadata = load_generator_model_and_params(
+        init_from, hf_cache_dir=HF_ROOT, model_config=model_config
+    )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     model.load_state_dict(params, strict=False)
     model.eval()
     model = torch.compile(model, dynamic=False, fullgraph=True)
 
-    latent = _is_latent(metadata)
+    effective_model_cfg = metadata.get("model_config", {}) or model_config or {}
+    latent = _is_latent({"model_config": effective_model_cfg})
     postprocess_fn = get_postprocess_fn(use_aug=False, use_latent=False, use_cache=latent)
     return model, postprocess_fn, metadata, device
 
@@ -116,7 +119,8 @@ def run_eval_fid(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inference: FID evaluation.")
-    parser.add_argument("--init-from", required=True, help="hf://<name> or local checkpoint path.")
+    parser.add_argument("--init-from", required=True, help="hf://<name>, artifact dir, or direct path to a .pt checkpoint.")
+    parser.add_argument("--config", type=str, default="", help="YAML config to supply model architecture when loading a raw .pt checkpoint.")
     parser.add_argument("--workdir", default="runs/infer", help="Output directory.")
     parser.add_argument("--cfg-scale", type=float, default=1.0, help="Classifier-free guidance scale.")
     parser.add_argument("--num-samples", type=int, default=50000)
@@ -132,7 +136,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_inference_from_args(args: argparse.Namespace) -> dict:
     _ = args.hsdp_dim
-    model, postprocess_fn, metadata, device = _load_model(args.init_from)
+    model_config = None
+    if args.config:
+        p = Path(args.config)
+        if p.suffix == ".json":
+            model_config = dict(json.loads(p.read_text(encoding="utf-8")).get("model_config", {}))
+        else:
+            model_config = dict(sanitize_model_config(load_config(args.config).model))
+    model, postprocess_fn, metadata, device = _load_model(args.init_from, model_config=model_config)
     _ = device
     gen_step_jit = {
         "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],

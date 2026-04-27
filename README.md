@@ -119,3 +119,10 @@ sbatch scripts/slurm/gen_1node_smoke.sbatch
 sbatch scripts/slurm/mae_2node_smoke.sbatch
 sbatch scripts/slurm/gen_2node_smoke.sbatch
 ```
+
+## Inference
+
+Inference can be run with:
+```bash
+uv run inference.py --init-from runs/0427_1328_gen_latent_ablation_mae640_short_fastwarmup --workdir runs/fid_0427_1328 --cfg-scale 2.0 --num-samples 1024
+```
