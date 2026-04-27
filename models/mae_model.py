@@ -211,15 +211,19 @@ class MAEResNet(nn.Module):
         patch_size: int = 4,
         dropout_prob: float = 0.0,
         layers: Tuple[int, int, int, int] = (2, 2, 2, 2),
+        use_bf16: bool = False,
+        attn_fp32: bool = True,
         input_patch_size: int = 1,
     ):
         super().__init__()
+        del attn_fp32
         self.num_classes = num_classes
         self.in_channels = in_channels
         self.base_channels = base_channels
         self.patch_size = patch_size
         self.dropout_prob = dropout_prob
         self.layers = tuple(layers)
+        self.use_bf16 = use_bf16
         self.input_patch_size = input_patch_size
 
         self.encoder = _ResNetEncoder(
@@ -244,6 +248,8 @@ class MAEResNet(nn.Module):
         mask_ratio_max: float = 0.75,
         train: bool = True,
     ):
+        dtype = torch.bfloat16 if self.use_bf16 else torch.float32
+        x = x.to(dtype)
         labels = labels.long()
 
         x = patch_input(x, self.input_patch_size)
@@ -285,6 +291,8 @@ class MAEResNet(nn.Module):
         patch_mean_size = patch_mean_size or []
         patch_std_size = patch_std_size or []
 
+        dtype = torch.bfloat16 if self.use_bf16 else torch.float32
+        x = x.to(dtype)
         x = patch_input(x, self.input_patch_size)
 
         need_blocks = isinstance(every_k_block, (int, float)) and not math.isinf(float(every_k_block)) and every_k_block >= 1

@@ -37,7 +37,7 @@ def _dict_to_easydict(d):
     return out
 
 
-_IGNORED_LEGACY_MODEL_KEYS = frozenset({"use_bf16", "attn_fp32"})
+_IGNORED_LEGACY_MODEL_KEYS = frozenset()
 _IGNORED_LEGACY_TRAIN_KEYS = frozenset({"keep_every"})
 
 

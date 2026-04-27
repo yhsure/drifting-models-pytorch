@@ -1,9 +1,11 @@
 hsdp_dim: 8
+compile: 0
 
 logging:
   project: "YOUR_WANDB_PROJECT"
   entity: "YOUR_WANDB_ENTITY"
-  use_wandb: false
+  use_wandb: true
+  mode: "offline"
   log_every_k: 10
 
 dataset:
