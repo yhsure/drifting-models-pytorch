@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 import torch.distributed as dist
 import yaml
 from absl import logging as absl_logging
@@ -142,6 +143,15 @@ class WandbLogger:
         with (self.offline_dir / "config.yaml").open("w", encoding="utf-8") as f:
             yaml.safe_dump(plain_config, f, sort_keys=False)
 
+    @staticmethod
+    def read_run_metadata(workdir: str | Path) -> dict[str, Any]:
+        path = Path(workdir).expanduser().resolve() / "log" / "run.json"
+        if not path.exists():
+            return {}
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+
     def set_logging(
         self,
         project: str | None = None,
@@ -210,6 +220,8 @@ class WandbLogger:
                     init_kwargs["id"] = self._run_id
             init_kwargs.update(kwargs)
             self._run = wandb.init(**{k: v for k, v in init_kwargs.items() if v is not None})
+            wandb.define_metric("samples/*", step_metric="samples/step")
+            wandb.define_metric("eval/*", step_metric="eval/step")
 
     def set_step(self, step: int) -> None:
         self.step = int(step)
@@ -246,6 +258,10 @@ class WandbLogger:
 
     @staticmethod
     def _normalize_images(images) -> np.ndarray:
+        if torch.is_tensor(images):
+            images = images.detach().cpu()
+            if images.dtype in (torch.bfloat16, torch.float16):
+                images = images.float()
         arr = np.asarray(images)
         if arr.ndim == 3:
             arr = arr[None, ...]
@@ -264,33 +280,47 @@ class WandbLogger:
         return arr
 
     @staticmethod
-    def _make_grid_image(images: np.ndarray, rows: int = 8) -> Image.Image:
-        rows = max(1, int(rows))
+    def _make_grid_image(images: np.ndarray, rows: int | None = None, cols: int | None = None) -> Image.Image:
+        if len(images) == 0:
+            raise ValueError("Expected at least one image for grid logging")
+        if cols is None:
+            if rows is None:
+                cols = int(math.ceil(math.sqrt(len(images))))
+            else:
+                cols = int(math.ceil(len(images) / max(1, int(rows))))
+        cols = max(1, int(cols))
+        rows = max(1, int(math.ceil(len(images) / cols)))
         pil_imgs = [Image.fromarray(img) for img in images]
-        cols = max(1, int(math.ceil(len(pil_imgs) / rows)))
         w, h = pil_imgs[0].size
-        total = rows * cols
-        if len(pil_imgs) < total:
-            blank = Image.new("RGB", (w, h), color=(0, 0, 0))
-            pil_imgs += [blank] * (total - len(pil_imgs))
         grid = Image.new("RGB", (cols * w, rows * h))
         for idx, img in enumerate(pil_imgs):
-            row = idx % rows
-            col = idx // rows
+            row = idx // cols
+            col = idx % cols
             grid.paste(img, (col * w, row * h))
         return grid
 
-    def log_image(self, name: str, images) -> None:
+    def log_image(
+        self,
+        name: str,
+        images,
+        *,
+        max_images: int = 36,
+        grid_rows: int = 6,
+        grid_cols: int | None = None,
+        log_individual: bool = False,
+    ) -> None:
         if not is_rank_zero():
             return
-        arr = self._normalize_images(images)
-        grid_img = self._make_grid_image(arr)
+        arr = self._normalize_images(images)[:max(1, int(max_images))]
+        grid_img = self._make_grid_image(arr, rows=grid_rows, cols=grid_cols)
         out = self.offline_dir / "images"
         out.mkdir(parents=True, exist_ok=True)
         grid_img.save(out / f"{name.replace('/', '_')}_step{self.step}.jpg", format="JPEG")
         if self._wandb is not None:
-            self._wandb.log({name: [self._wandb.Image(img) for img in arr]}, step=self.step)
-            self._wandb.log({f"{name}_grid": self._wandb.Image(grid_img)}, step=self.step)
+            payload = {f"{name}_grid": self._wandb.Image(grid_img)}
+            if log_individual:
+                payload[name] = [self._wandb.Image(img) for img in arr]
+            self._wandb.log(payload, step=self.step)
 
     def finish(self) -> None:
         self._flush_buffer()

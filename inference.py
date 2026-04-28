@@ -53,6 +53,22 @@ def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
         return postprocess_fn(latent_samples).cpu()
 
 
+def _infer_eval_step(init_from: str) -> int:
+    run_path = Path(init_from).expanduser()
+    if not run_path.exists():
+        return 0
+    checkpoint_dir = run_path / "checkpoints"
+    if not checkpoint_dir.exists():
+        return 0
+    steps = []
+    for ckpt in checkpoint_dir.glob("step_*.pt"):
+        try:
+            steps.append(int(ckpt.stem.removeprefix("step_")))
+        except ValueError:
+            continue
+    return max(steps, default=0)
+
+
 def run_eval_fid(
     gen_step_jit,
     params,
@@ -67,6 +83,8 @@ def run_eval_fid(
     wandb_entity: str | None,
     wandb_project: str,
     wandb_name: str | None,
+    wandb_run_id: str | None = None,
+    wandb_mode: str | None = None,
 ) -> dict:
     postprocess_fn = gen_step_jit["postprocess_fn"]
     apply_fn = gen_step_jit["apply_fn"]
@@ -82,6 +100,20 @@ def run_eval_fid(
     )
 
     work_path = Path(workdir).resolve()
+    init_path = Path(init_from).expanduser()
+    train_metadata = WandbLogger.read_run_metadata(init_path) if init_path.exists() else {}
+    if train_metadata:
+        use_wandb = use_wandb or bool(train_metadata.get("use_wandb", False))
+        wandb_run_id = wandb_run_id or train_metadata.get("run_id")
+        wandb_project = wandb_project or train_metadata.get("project") or "drift"
+        wandb_entity = wandb_entity or train_metadata.get("entity")
+        wandb_name = wandb_name or train_metadata.get("name")
+        # Keep standalone eval metrics and images in the training run directory
+        # when updating the corresponding WandB experiment.
+        if wandb_run_id:
+            work_path = init_path.resolve()
+
+    eval_step = _infer_eval_step(init_from)
     logger = WandbLogger()
     logger.set_logging(
         project=wandb_project,
@@ -90,7 +122,10 @@ def run_eval_fid(
         use_wandb=use_wandb,
         workdir=str(work_path),
         log_every_k=1,
+        run_id=wandb_run_id,
+        mode=wandb_mode,
     )
+    logger.set_step(eval_step)
 
     metrics = evaluate_fid(
         dataset_name="imagenet256",
@@ -104,14 +139,27 @@ def run_eval_fid(
         eval_loader=eval_loader,
         logger=logger,
         num_samples=num_samples,
-        log_folder="fid_eval",
+        log_folder="eval",
         log_prefix=f"cfg_{cfg_scale:g}",
         eval_prc_recall=(num_samples >= 50000),
         eval_isc=True,
         eval_fid=True,
     )
+    logger.log_dict(
+        {
+            "eval/cfg_scale": cfg_scale,
+            **{f"eval/{k}": v for k, v in metrics.items()},
+        }
+    )
     logger.finish()
-    return {"init_from": init_from, "cfg_scale": cfg_scale, "metadata": metadata, **metrics}
+    return {
+        "init_from": init_from,
+        "cfg_scale": cfg_scale,
+        "eval_step": eval_step,
+        "wandb_run_id": wandb_run_id,
+        "metadata": metadata,
+        **metrics,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -125,8 +173,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hsdp-dim", type=int, default=None)
     parser.add_argument("--use-wandb", action="store_true")
     parser.add_argument("--wandb-entity", type=str, default=None)
-    parser.add_argument("--wandb-project", type=str, default="release-fid")
+    parser.add_argument("--wandb-project", type=str, default="")
     parser.add_argument("--wandb-name", type=str, default=None)
+    parser.add_argument("--wandb-run-id", type=str, default=None)
+    parser.add_argument("--wandb-mode", type=str, default=None)
     return parser
 
 
@@ -151,6 +201,8 @@ def run_inference_from_args(args: argparse.Namespace) -> dict:
         wandb_entity=args.wandb_entity,
         wandb_project=args.wandb_project,
         wandb_name=args.wandb_name,
+        wandb_run_id=args.wandb_run_id,
+        wandb_mode=args.wandb_mode,
     )
     return result
 

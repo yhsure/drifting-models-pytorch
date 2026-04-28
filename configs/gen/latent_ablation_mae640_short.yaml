@@ -85,6 +85,10 @@ train:
   push_at_resume: 1
   eval_on_step_one: false
   run_eval: false
+  train_sample_per_step: 400
+  train_sample_grid_size: 36
+  train_sample_cfg: 2.0
+  train_sample_seed: 1234
 
 feature:
   mae_path: "hf://mae_latent_640"

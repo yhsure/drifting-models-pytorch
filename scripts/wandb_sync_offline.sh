@@ -43,13 +43,21 @@ echo "If WandB asks for a login, stop here and run: ${WANDB_BIN} login"
 while true; do
   while IFS= read -r -d "" run_dir; do
     if [[ -d "${run_dir}" ]]; then
+      SYNC_ARGS=()
       shopt -s nullglob
       synced=("${run_dir}"/run-*.wandb.synced)
       shopt -u nullglob
       if (( ${#synced[@]} > 0 )); then
-        continue
+        newest_synced="$(find "${run_dir}" -maxdepth 1 -name 'run-*.wandb.synced' -printf '%T@\n' | sort -nr | head -n1)"
+        newest_payload="$(find "${run_dir}" -type f ! -name '*.synced' -printf '%T@\n' | sort -nr | head -n1)"
+        if [[ -n "${newest_synced}" && -n "${newest_payload}" ]]; then
+          if awk "BEGIN { exit !(${newest_payload} <= ${newest_synced}) }"; then
+            continue
+          fi
+          SYNC_ARGS=(--include-synced)
+        fi
       fi
-      "${WANDB_BIN}" sync "${PROJECT_ARG[@]}" "${ENTITY_ARG[@]}" "${run_dir}" || true
+      "${WANDB_BIN}" sync "${PROJECT_ARG[@]}" "${ENTITY_ARG[@]}" "${SYNC_ARGS[@]}" "${run_dir}" || true
     fi
   done < <(find "${WANDB_WATCH_DIR}" -type d -name 'offline-run-*' -path '*/wandb/offline-run-*' -prune -print0)
 

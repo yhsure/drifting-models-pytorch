@@ -147,6 +147,8 @@ uv run python main.py --config configs/mae/latent_640.yaml --workdir runs/mae_la
 
 ## FID inference
 
+When `--init-from` points at a local training run, `inference.py` reads `log/run.json` from that run. If the training run used WandB, eval metrics and sample grids are logged back to the same WandB run id at the latest checkpoint step.
+
 ```bash
 uv run python inference.py \
   --init-from runs/gen_latent_sota_B \
@@ -155,6 +157,15 @@ uv run python inference.py \
   --eval-batch-size 512 \
   --json-out runs/fid/result.json
 ```
+
+For a Slurm train-then-eval chain, submit the training job first and use an `afterok` dependency for eval:
+
+```bash
+train_job="$(sbatch --parsable scripts/slurm/gen_latent_ablation_mae640_short.sbatch)"
+sbatch --dependency=afterok:${train_job} scripts/slurm/gen_latent_ablation_mae640_short_eval.sbatch
+```
+
+The eval job should pass `--init-from` as the completed training run directory. The provided eval script auto-selects the newest matching short MAE-640 run, or you can override it with `TRAIN_RUN=/path/to/run`. Keeping eval pointed at that directory is what lets it update the matching WandB experiment.
 
 ## CI
 

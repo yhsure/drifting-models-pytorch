@@ -81,6 +81,10 @@ train:
   push_at_resume: 1
   eval_on_step_one: false
   run_eval: false
+  train_sample_per_step: 1
+  train_sample_grid_size: 4
+  train_sample_cfg: 1.0
+  train_sample_seed: 1234
 
 feature:
   use_mae: false

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from typing import Dict
 
 import numpy as np
 import torch
@@ -67,13 +66,17 @@ def evaluate_fid_ddp(
             break
     local_samples = np.concatenate(all_samples, axis=0)[:local_n]
 
-    metrics: Dict[str, float] = {}
+    metrics: dict[str, float] = {}
 
     if eval_fid:
         ref = _load_ref_stats(dataset_name)
         local_feats = _compute_features(local_samples, device=device)
         local_feats_t = torch.from_numpy(local_feats).to(device)
-        all_feats_t = _gather_tensors(local_feats_t, device, world_size) if is_dist and world_size > 1 else local_feats_t
+        all_feats_t = (
+            _gather_tensors(local_feats_t, device, world_size)
+            if is_dist and world_size > 1
+            else local_feats_t
+        )
         if rank == 0:
             all_feats = all_feats_t.cpu().numpy()[:num_samples].astype(np.float64)
             metrics["fid"] = float(
@@ -101,8 +104,20 @@ def evaluate_fid_ddp(
     if rank == 0:
         metrics["fid_time"] = float(time.time() - start)
         if logger is not None:
-            logger.log_dict({f"{log_folder}/{log_prefix}_{k}": v for k, v in metrics.items()})
-            logger.log_image(f"{log_folder}/{log_prefix}_viz", local_samples[:64])
+            logger.log_dict({
+                f"{log_folder}/{log_prefix}_{k}": v for k, v in metrics.items()
+            } | {
+                f"{log_folder}/step": getattr(logger, "step", 0),
+            })
+            if log_folder == "eval":
+                logger.log_dict({
+                    "samples/step": getattr(logger, "step", 0),
+                    "samples/final_fid": metrics.get("fid", float("nan")),
+                    "samples/final_isc_mean": metrics.get("isc_mean", float("nan")),
+                })
+                logger.log_image("samples/final_eval", local_samples[:36], max_images=36, grid_cols=6)
+            else:
+                logger.log_image(f"{log_folder}/{log_prefix}_viz", local_samples[:36], max_images=36, grid_cols=6)
 
     if is_dist:
         dist.barrier()

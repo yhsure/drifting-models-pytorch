@@ -15,7 +15,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from einops import rearrange, repeat
 from tqdm import tqdm
 
-from dataset.dataset import get_postprocess_fn, infinite_sampler
+from dataset.dataset import epoch0_sampler, get_postprocess_fn, infinite_sampler
 from drift_loss import drift_loss
 from memory_bank import ArrayMemoryBank
 from models.mae_model import build_activation_function
@@ -197,6 +197,48 @@ def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
         return postprocess_fn(latent_samples).cpu()
 
 
+def _log_training_samples(
+    *,
+    logger,
+    eval_loader,
+    model,
+    postprocess_fn,
+    cfg_scale: float,
+    grid_size: int,
+    seed: int,
+) -> None:
+    if _rank() != 0 or grid_size <= 0:
+        return
+    labels = []
+    first_images = None
+    for batch in epoch0_sampler(eval_loader):
+        if not isinstance(batch, (tuple, list)) or len(batch) < 2:
+            continue
+        if first_images is None:
+            first_images = batch[0]
+        labels.append(batch[1])
+        if sum(int(x.shape[0]) for x in labels) >= grid_size:
+            break
+    if not labels:
+        return
+    sample_labels = torch.cat(labels, dim=0)[:grid_size]
+    batch = (first_images, sample_labels)
+    devices = [torch.cuda.current_device()] if torch.cuda.is_available() else []
+    with torch.random.fork_rng(devices=devices):
+        torch.manual_seed(int(seed))
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(int(seed))
+        samples = generate_step(
+            batch,
+            params=model,
+            apply_fn=lambda m, y, cfg: m(c=y, cfg_scale=cfg, train=False)["samples"],  # noqa: E731
+            postprocess_fn=postprocess_fn,
+            cfg_scale=float(cfg_scale),
+        )
+    logger.log_dict({"samples/step": logger.step, "samples/cfg_scale": float(cfg_scale)})
+    logger.log_image("samples/train", samples, max_images=grid_size, grid_cols=6)
+
+
 def train_gen(
     model,
     optimizer,
@@ -244,6 +286,10 @@ def train_gen(
     workdir="runs",
     eval_on_step_one=True,
     run_eval=True,
+    train_sample_per_step: int = 0,
+    train_sample_grid_size: int = 36,
+    train_sample_cfg: float | None = None,
+    train_sample_seed: int = 1234,
     compile_level: int = 2,
     profile: bool = False,
 ):
@@ -394,6 +440,23 @@ def train_gen(
         logger.log_dict(metrics)
 
         now_step = step + 1
+        do_train_sample = int(train_sample_per_step) > 0 and (
+            now_step % int(train_sample_per_step) == 0 or now_step == total_steps
+        )
+        if do_train_sample:
+            sample_cfg = cfg_list[0] if train_sample_cfg is None else float(train_sample_cfg)
+            _log_training_samples(
+                logger=logger,
+                eval_loader=eval_loader,
+                model=state.ema_model,
+                postprocess_fn=postprocess_fn,
+                cfg_scale=sample_cfg,
+                grid_size=int(train_sample_grid_size),
+                seed=int(train_sample_seed),
+            )
+            if dist.is_available() and dist.is_initialized():
+                dist.barrier()
+
         if now_step % save_per_step == 0 or now_step == total_steps:
             save_checkpoint(state, keep=keep_last, workdir=workdir)
             save_params_ema_artifact(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from typing import Dict
 
 import numpy as np
 import torch
@@ -12,7 +11,6 @@ from torchmetrics.image.inception import InceptionScore
 from dataset.dataset import epoch0_sampler
 from utils.env import IMAGENET_FID_NPZ, IMAGENET_PR_NPZ
 from utils.logging import log_for_0
-
 
 _DATASET_STATS = {
     "imagenet256": IMAGENET_FID_NPZ,
@@ -124,7 +122,7 @@ def evaluate_fid(
 
     samples = np.concatenate(all_samples, axis=0)[:num_samples]
 
-    metrics: Dict[str, float] = {}
+    metrics: dict[str, float] = {}
     if eval_fid:
         ref = _load_ref_stats(dataset_name)
         stats = _compute_stats(samples, num_samples, compute_logits=eval_isc, compute_features=eval_prc_recall)
@@ -143,6 +141,18 @@ def evaluate_fid(
             log_for_0("PR reference path not configured; skipping precision/recall.")
 
     metrics["fid_time"] = float(time.time() - start)
-    logger.log_dict({f"{log_folder}/{log_prefix}_{k}": v for k, v in metrics.items()})
-    logger.log_image(f"{log_folder}/{log_prefix}_viz", samples[:64])
+    logger.log_dict({
+        f"{log_folder}/{log_prefix}_{k}": v for k, v in metrics.items()
+    } | {
+        f"{log_folder}/step": getattr(logger, "step", 0),
+    })
+    if log_folder == "eval":
+        logger.log_dict({
+            "samples/step": getattr(logger, "step", 0),
+            "samples/final_fid": metrics.get("fid", float("nan")),
+            "samples/final_isc_mean": metrics.get("isc_mean", float("nan")),
+        })
+        logger.log_image("samples/final_eval", samples[:36], max_images=36, grid_cols=6)
+    else:
+        logger.log_image(f"{log_folder}/{log_prefix}_viz", samples[:36], max_images=36, grid_cols=6)
     return metrics
