@@ -186,22 +186,25 @@ class Attention(nn.Module):
         qk = (q, k) if return_qk else None
 
         if self.attn_fp32:
-            q = q.float() * (head_dim ** -0.5)
+            q = q.float()
             k = k.float()
             v = v.float()
         else:
-            q = q * (head_dim ** -0.5)
+            q = q.to(x.dtype)
+            k = k.to(x.dtype)
+            v = v.to(x.dtype)
 
         q = q.permute(0, 2, 1, 3)
         k = k.permute(0, 2, 1, 3)
         v = v.permute(0, 2, 1, 3)
 
-        attn_logits = torch.matmul(q, k.transpose(-1, -2))
-        attn_weights = torch.softmax(attn_logits, dim=-1)
-        if self.attn_drop > 0:
-            attn_weights = F.dropout(attn_weights, p=self.attn_drop, training=not deterministic)
-
-        out = torch.matmul(attn_weights, v)
+        out = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            dropout_p=self.attn_drop if not deterministic else 0.0,
+            scale=head_dim ** -0.5,
+        )
         out = out.permute(0, 2, 1, 3).reshape(bsz, seqlen, dim)
         out = self.proj(out)
         if self.proj_drop > 0:
