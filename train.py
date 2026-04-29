@@ -16,7 +16,7 @@ from einops import rearrange, repeat
 from tqdm import tqdm
 
 from dataset.dataset import epoch0_sampler, get_postprocess_fn, infinite_sampler
-from drift_loss import drift_loss_global_batch
+from drift_loss import drift_loss
 from memory_bank import ArrayMemoryBank
 from models.mae_model import build_activation_function
 from utils.ckpt_util import restore_checkpoint, save_checkpoint, save_params_ema_artifact
@@ -184,7 +184,9 @@ def train_step(
         gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
         gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
-    feature_batches = []
+    total_loss = torch.tensor(0.0, device=device)
+    total_info = {}
+
     for k in sg_features.keys():
         feature_pos = sg_features[k][:, :n_pos]
         feature_gen = gen_features[k]
@@ -197,21 +199,16 @@ def train_step(
         b_feat = feature_gen.shape[0]
         weight_neg = repeat(uncond_w, "b -> (b f) k", f=b_feat // uncond_w.shape[0], k=n_uncond)
 
-        feature_batches.append(
-            {
-                "name": k,
-                "gen": feature_gen,
-                "fixed_pos": feature_pos,
-                "fixed_neg": feature_uncond,
-                "weight_gen": torch.ones_like(feature_gen[:, :, 0]),
-                "weight_pos": torch.ones_like(feature_pos[:, :, 0]),
-                "weight_neg": weight_neg,
-            }
+        loss_k, info_k = drift_loss(
+            gen=feature_gen,
+            fixed_pos=feature_pos,
+            fixed_neg=feature_uncond,
+            weight_gen=torch.ones_like(feature_gen[:, :, 0]),
+            weight_pos=torch.ones_like(feature_pos[:, :, 0]),
+            weight_neg=weight_neg,
+            **loss_kwargs,
         )
 
-    total_loss = torch.tensor(0.0, device=device)
-    total_info = {}
-    for k, loss_k, info_k in drift_loss_global_batch(feature_batches, **loss_kwargs):
         total_loss = total_loss + loss_k.mean()
         for k2, v2 in info_k.items():
             total_info[f"{k2}/{k}"] = float(v2.detach().cpu().item())
