@@ -22,6 +22,7 @@ function drift_export_env() {
   export HF_HOME="${hf_home}"
   export HF_ROOT="${HF_HOME}"
   export HF_HUB_CACHE="${HF_HOME}/hub"
+  export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"
   export DRIFT_SDVAE_PATH="${DRIFT_SDVAE_PATH:-${HF_HUB_CACHE}/models--stabilityai--sd-vae-ft-mse/snapshots/31f26fdeee1355a5c34592e401dd41e45d25a493}"
   export WANDB_MODE="${WANDB_MODE:-offline}"
   export WANDB_PROJECT="${WANDB_PROJECT:-drift}"
