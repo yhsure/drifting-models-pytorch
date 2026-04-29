@@ -38,7 +38,7 @@ def _dict_to_easydict(d):
 
 
 _IGNORED_LEGACY_MODEL_KEYS = frozenset()
-_IGNORED_LEGACY_TRAIN_KEYS = frozenset({"keep_every"})
+_IGNORED_LEGACY_TRAIN_KEYS = frozenset()
 
 
 def _sanitize_legacy_section(section: Mapping[str, Any] | None, ignored_keys: frozenset[str]) -> EasyDict:

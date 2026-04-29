@@ -43,7 +43,8 @@ def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
     if ckpts:
         restored = torch.load(ckpts[-1], map_location="cpu", weights_only=False)
         if isinstance(restored, dict) and "model" in restored:
-            return restored["model"], {}
+            params = restored.get("ema_model", restored.get("ema_params", restored["model"]))
+            return params, {}
 
     raise ValueError(
         "Local init_from must be an artifact or checkpoint dir with params: "

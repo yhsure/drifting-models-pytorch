@@ -16,7 +16,7 @@ from einops import rearrange, repeat
 from tqdm import tqdm
 
 from dataset.dataset import epoch0_sampler, get_postprocess_fn, infinite_sampler
-from drift_loss import drift_loss
+from drift_loss import drift_loss_global_batch
 from memory_bank import ArrayMemoryBank
 from models.mae_model import build_activation_function
 from utils.ckpt_util import restore_checkpoint, save_checkpoint, save_params_ema_artifact
@@ -77,6 +77,56 @@ def _set_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
         group["lr"] = float(lr)
 
 
+def _sync_after_rank0_io(workdir: str, tag: str, timeout_s: float = 3600.0) -> None:
+    if not (dist.is_available() and dist.is_initialized()):
+        return
+
+    sync_dir = Path(workdir).resolve() / "log" / "sync"
+    marker = sync_dir / f"{tag}.done"
+    if _rank() == 0:
+        sync_dir.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(time.time()), encoding="utf-8")
+        return
+
+    start = time.time()
+    while not marker.exists():
+        if time.time() - start > timeout_s:
+            raise TimeoutError(f"Timed out waiting for rank-0 IO marker: {marker}")
+        time.sleep(2.0)
+
+
+def _strip_compile_prefix(name: str) -> str:
+    return name.removeprefix("_orig_mod.")
+
+
+def _named_module_tensors(model: torch.nn.Module):
+    model = _unwrap_model(model)
+    params = {_strip_compile_prefix(k): v for k, v in model.named_parameters()}
+    buffers = {_strip_compile_prefix(k): v for k, v in model.named_buffers()}
+    return params, buffers
+
+
+def _update_ema_model(ema_model: torch.nn.Module, model: torch.nn.Module, decay: float) -> None:
+    ema_params, ema_buffers = _named_module_tensors(ema_model)
+    model_params, model_buffers = _named_module_tensors(model)
+
+    if ema_params.keys() != model_params.keys():
+        missing = sorted(ema_params.keys() - model_params.keys())
+        extra = sorted(model_params.keys() - ema_params.keys())
+        raise RuntimeError(f"EMA/model parameter mismatch: missing={missing[:5]}, extra={extra[:5]}")
+
+    with torch.inference_mode():
+        for name, ema_param in ema_params.items():
+            param = model_params[name].detach().to(device=ema_param.device, dtype=ema_param.dtype)
+            ema_param.mul_(decay).add_(param, alpha=1.0 - decay)
+
+        for name, ema_buffer in ema_buffers.items():
+            if name not in model_buffers:
+                continue
+            buffer = model_buffers[name].detach().to(device=ema_buffer.device, dtype=ema_buffer.dtype)
+            ema_buffer.copy_(buffer)
+
+
 def train_step(
     state: TrainState,
     labels,
@@ -134,9 +184,7 @@ def train_step(
         gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
         gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
-    total_loss = torch.tensor(0.0, device=device)
-    total_info = {}
-
+    feature_batches = []
     for k in sg_features.keys():
         feature_pos = sg_features[k][:, :n_pos]
         feature_gen = gen_features[k]
@@ -149,16 +197,21 @@ def train_step(
         b_feat = feature_gen.shape[0]
         weight_neg = repeat(uncond_w, "b -> (b f) k", f=b_feat // uncond_w.shape[0], k=n_uncond)
 
-        loss_k, info_k = drift_loss(
-            gen=feature_gen,
-            fixed_pos=feature_pos,
-            fixed_neg=feature_uncond,
-            weight_gen=torch.ones_like(feature_gen[:, :, 0]),
-            weight_pos=torch.ones_like(feature_pos[:, :, 0]),
-            weight_neg=weight_neg,
-            **loss_kwargs,
+        feature_batches.append(
+            {
+                "name": k,
+                "gen": feature_gen,
+                "fixed_pos": feature_pos,
+                "fixed_neg": feature_uncond,
+                "weight_gen": torch.ones_like(feature_gen[:, :, 0]),
+                "weight_pos": torch.ones_like(feature_pos[:, :, 0]),
+                "weight_neg": weight_neg,
+            }
         )
 
+    total_loss = torch.tensor(0.0, device=device)
+    total_info = {}
+    for k, loss_k, info_k in drift_loss_global_batch(feature_batches, **loss_kwargs):
         total_loss = total_loss + loss_k.mean()
         for k2, v2 in info_k.items():
             total_info[f"{k2}/{k}"] = float(v2.detach().cpu().item())
@@ -167,10 +220,7 @@ def train_step(
     g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
     state.optimizer.step()
 
-    with torch.inference_mode():
-        base_model = state.model.module if hasattr(state.model, "module") else state.model
-        for p_ema, p in zip(state.ema_model.parameters(), base_model.parameters()):
-            p_ema.mul_(state.ema_decay).add_(p, alpha=(1.0 - state.ema_decay))
+    _update_ema_model(state.ema_model, state.model, state.ema_decay)
 
     metric = {k: float(v) for k, v in total_info.items()}
     metric["loss"] = float(total_loss.detach().cpu().item())
@@ -280,6 +330,7 @@ def train_gen(
     max_grad_norm=2.0,
     loss_kwargs=dict(R_list=(0.02, 0.05, 0.2)),
     keep_last=2,
+    keep_every=None,
     init_from="",
     push_per_step=0,
     push_at_resume=3000,
@@ -454,19 +505,17 @@ def train_gen(
                 grid_size=int(train_sample_grid_size),
                 seed=int(train_sample_seed),
             )
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+            _sync_after_rank0_io(workdir, f"sample_step_{now_step:09d}")
 
         if now_step % save_per_step == 0 or now_step == total_steps:
-            save_checkpoint(state, keep=keep_last, workdir=workdir)
+            save_checkpoint(state, keep=keep_last, keep_every=keep_every, workdir=workdir)
             save_params_ema_artifact(
                 state,
                 workdir=workdir,
                 kind="gen",
                 model_config=_generator_model_config(model),
             )
-            if dist.is_available() and dist.is_initialized():
-                dist.barrier()
+            _sync_after_rank0_io(workdir, f"save_step_{now_step:09d}")
 
         do_step_one_eval = bool(eval_on_step_one) and now_step == 1
         do_eval = bool(run_eval) and ((now_step % eval_per_step == 0) or do_step_one_eval or (now_step == total_steps))
