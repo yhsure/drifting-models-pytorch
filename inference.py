@@ -145,12 +145,19 @@ def run_eval_fid(
         eval_isc=True,
         eval_fid=True,
     )
-    logger.log_dict(
-        {
-            "eval/cfg_scale": cfg_scale,
-            **{f"eval/{k}": v for k, v in metrics.items()},
-        }
-    )
+    log_payload = {
+        "eval/cfg_scale": cfg_scale,
+        **{f"eval/{k}": v for k, v in metrics.items()},
+    }
+    if "fid" in metrics:
+        log_payload["samples/final_fid"] = metrics["fid"]
+    if "isc_mean" in metrics:
+        log_payload["samples/final_isc_mean"] = metrics["isc_mean"]
+    if "isc_std" in metrics:
+        log_payload["samples/final_isc_std"] = metrics["isc_std"]
+    log_payload["samples/final_cfg_scale"] = cfg_scale
+    log_payload["samples/step"] = eval_step
+    logger.log_dict(log_payload)
     logger.finish()
     return {
         "init_from": init_from,

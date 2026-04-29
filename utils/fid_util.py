@@ -114,7 +114,10 @@ def evaluate_fid(
         _ = i
         gen_samples = gen_func(batch, **gen_params)
         if isinstance(gen_samples, torch.Tensor):
-            gen_samples = gen_samples.detach().cpu().numpy()
+            gen_samples = gen_samples.detach().cpu()
+            if gen_samples.dtype in (torch.bfloat16, torch.float16):
+                gen_samples = gen_samples.float()
+            gen_samples = gen_samples.numpy()
         all_samples.append(_to_uint8(gen_samples))
         cur += gen_samples.shape[0]
         if cur >= num_samples:
