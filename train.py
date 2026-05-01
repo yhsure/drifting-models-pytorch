@@ -3,20 +3,21 @@ from __future__ import annotations
 import argparse
 import copy
 import gc
+import math
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 from einops import rearrange, repeat
+from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 
 from dataset.dataset import epoch0_sampler, get_postprocess_fn, infinite_sampler
-from drift_loss import drift_loss
+from drift_loss import drift_loss, jsd_mog_loss, likelihood_mog_loss
 from memory_bank import ArrayMemoryBank
 from models.mae_model import build_activation_function
 from utils.ckpt_util import restore_checkpoint, save_checkpoint, save_params_ema_artifact
@@ -37,9 +38,12 @@ class TrainState:
     step: int
     model: torch.nn.Module
     optimizer: torch.optim.Optimizer
-    ema_model: Optional[torch.nn.Module] = None
+    ema_model: torch.nn.Module | None = None
     ema_decay: float = 0.999
-    device: Optional[torch.device] = None
+    device: torch.device | None = None
+    mog_log_sigmas: dict[str, torch.nn.Parameter] | None = None
+    mog_log_sigma_init: dict[str, torch.Tensor] | None = None
+    optimizer_state_init: dict | None = None
 
 
 def _world_size() -> int:
@@ -77,6 +81,64 @@ def _set_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
         group["lr"] = float(lr)
 
 
+def _add_mog_param_group(
+    optimizer: torch.optim.Optimizer,
+    params: list[torch.nn.Parameter],
+) -> None:
+    existing = {id(p) for group in optimizer.param_groups for p in group["params"]}
+    new_params = [p for p in params if id(p) not in existing]
+    if new_params:
+        optimizer.add_param_group({"params": new_params, "weight_decay": 0.0})
+
+
+def _ensure_mog_log_sigmas(state: TrainState, sg_features: dict[str, torch.Tensor]) -> None:
+    if state.mog_log_sigmas is None:
+        state.mog_log_sigmas = {}
+
+    init_payload = state.mog_log_sigma_init or {}
+    ordered_keys = [key for key in init_payload if key in sg_features]
+    ordered_keys.extend(key for key in sg_features if key not in init_payload)
+    for key in ordered_keys:
+        if key in state.mog_log_sigmas:
+            continue
+        feat = sg_features[key]
+        dim = int(feat.shape[-1])
+        if key in init_payload:
+            init = torch.as_tensor(init_payload[key], dtype=torch.float32, device=state.device).reshape(-1)
+            if init.numel() == 1:
+                init = init.repeat(dim)
+            elif init.numel() != dim:
+                raise ValueError(f"mog_log_sigmas[{key!r}] has {init.numel()} values, expected {dim}.")
+        else:
+            init = torch.full((dim,), math.log(float(dim) ** 0.5), dtype=torch.float32, device=state.device)
+        param = torch.nn.Parameter(init.detach().clone())
+        state.mog_log_sigmas[key] = param
+
+    _add_mog_param_group(state.optimizer, list(state.mog_log_sigmas.values()))
+    if state.optimizer_state_init is not None:
+        state.optimizer.load_state_dict(state.optimizer_state_init)
+        state.optimizer_state_init = None
+
+
+def _sync_mog_sigma_grads(state: TrainState) -> None:
+    if not (dist.is_available() and dist.is_initialized()):
+        return
+    if not state.mog_log_sigmas:
+        return
+    world_size = dist.get_world_size()
+    for param in state.mog_log_sigmas.values():
+        if param.grad is not None:
+            dist.all_reduce(param.grad, op=dist.ReduceOp.SUM)
+            param.grad.div_(world_size)
+
+
+def _grad_clip_params(state: TrainState) -> list[torch.nn.Parameter]:
+    params = list(state.model.parameters())
+    if state.mog_log_sigmas:
+        params.extend(state.mog_log_sigmas.values())
+    return params
+
+
 def train_step(
     state: TrainState,
     labels,
@@ -93,8 +155,17 @@ def train_step(
     activation_kwargs=dict(),
     loss_kwargs=dict(R_list=[0.02, 0.05, 0.2]),
     max_grad_norm=2.0,
+    lambda_drift=1.0,
+    lambda_mog=0.0,
+    mog_loss_type="jsd",
+    sigma_latent=1.0,
 ):
     device = state.device
+    do_drift = lambda_drift > 0.0
+    do_mog = lambda_mog > 0.0
+    mog_loss_type = str(mog_loss_type).lower()
+    if do_mog and mog_loss_type not in {"jsd", "likelihood", "nll"}:
+        raise ValueError(f"Unsupported mog_loss_type={mog_loss_type!r}. Expected 'jsd' or 'likelihood'.")
     labels = labels.to(device=device, dtype=torch.long)
     samples = samples.to(device=device, dtype=torch.float32)
     negative_samples = negative_samples.to(device=device, dtype=torch.float32)
@@ -104,7 +175,9 @@ def train_step(
     frac = torch.rand((bsz,), device=device)
     pw = 1 - neg_cfg_pw
     if abs(pw) < 1e-6:
-        cfg = torch.exp(torch.log(torch.tensor(cfg_min, device=device)) + frac * (torch.log(torch.tensor(cfg_max, device=device)) - torch.log(torch.tensor(cfg_min, device=device))))
+        log_cfg_min = torch.log(torch.tensor(cfg_min, device=device))
+        log_cfg_max = torch.log(torch.tensor(cfg_max, device=device))
+        cfg = torch.exp(log_cfg_min + frac * (log_cfg_max - log_cfg_min))
     else:
         cfg = (cfg_min**pw + frac * (cfg_max**pw - cfg_min**pw)) ** (1 / pw)
 
@@ -119,7 +192,13 @@ def train_step(
 
     with torch.no_grad():
         sg_features_raw = feature_apply(neg_samples_input, **activation_kwargs)
-        sg_features = {k: rearrange(v, "(b x) ... -> b x ...", b=bsz, x=n_pos + n_uncond) for k, v in sg_features_raw.items()}
+        sg_features = {
+            k: rearrange(v, "(b x) ... -> b x ...", b=bsz, x=n_pos + n_uncond)
+            for k, v in sg_features_raw.items()
+        }
+
+    if do_mog:
+        _ensure_mog_log_sigmas(state, sg_features)
 
     lr = learning_rate_fn(state.step)
     _set_lr(state.optimizer, lr)
@@ -129,43 +208,91 @@ def train_step(
 
     input_labels = repeat(labels, "b -> (b g)", g=gen_per_label)
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
-    with torch.autocast("cuda", dtype=torch.bfloat16):
-        gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
-        gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
-        gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
+    gen_features = None
+    gen_features_mog = None
+    if do_drift or do_mog:
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            if do_drift and do_mog:
+                two_stage = state.model(
+                    c=input_labels, cfg_scale=input_cfg, two_stage=True, sigma_latent=sigma_latent,
+                )
+                gen_features_drift_raw = feature_apply(two_stage["gen_drift"], **activation_kwargs)
+                gen_features_mog_raw = feature_apply(two_stage["gen_mog"], **activation_kwargs)
+                gen_features = {
+                    k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen)
+                    for k, v in gen_features_drift_raw.items()
+                }
+                gen_features_mog = {
+                    k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen)
+                    for k, v in gen_features_mog_raw.items()
+                }
+            else:
+                gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
+                gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
+                features = {
+                    k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen)
+                    for k, v in gen_features_raw.items()
+                }
+                if do_drift:
+                    gen_features = features
+                if do_mog:
+                    gen_features_mog = features
 
     total_loss = torch.tensor(0.0, device=device)
     total_info = {}
 
     for k in sg_features.keys():
         feature_pos = sg_features[k][:, :n_pos]
-        feature_gen = gen_features[k]
-        feature_uncond = sg_features[k][:, n_pos:]
-
         feature_pos = rearrange(feature_pos, "b x f d -> (b f) x d")
-        feature_gen = rearrange(feature_gen, "b x f d -> (b f) x d")
-        feature_uncond = rearrange(feature_uncond, "b x f d -> (b f) x d")
 
-        b_feat = feature_gen.shape[0]
-        weight_neg = repeat(uncond_w, "b -> (b f) k", f=b_feat // uncond_w.shape[0], k=n_uncond)
+        if do_drift:
+            feature_gen = gen_features[k]
+            feature_uncond = sg_features[k][:, n_pos:]
 
-        loss_k, info_k = drift_loss(
-            gen=feature_gen,
-            fixed_pos=feature_pos,
-            fixed_neg=feature_uncond,
-            weight_gen=torch.ones_like(feature_gen[:, :, 0]),
-            weight_pos=torch.ones_like(feature_pos[:, :, 0]),
-            weight_neg=weight_neg,
-            **loss_kwargs,
-        )
+            # x is the sample axis. b and f index independent label/feature-position spaces.
+            feature_gen = rearrange(feature_gen, "b x f d -> (b f) x d")
+            feature_uncond = rearrange(feature_uncond, "b x f d -> (b f) x d")
 
-        total_loss = total_loss + loss_k.mean()
-        for k2, v2 in info_k.items():
-            total_info[f"{k2}/{k}"] = float(v2.detach().cpu().item())
+            b_feat = feature_gen.shape[0]
+            weight_neg = repeat(uncond_w, "b -> (b f) k", f=b_feat // uncond_w.shape[0], k=n_uncond)
 
-    total_loss.backward()
-    g_norm = float(torch.nn.utils.clip_grad_norm_(state.model.parameters(), max_grad_norm).item())
-    state.optimizer.step()
+            loss_k, info_k = drift_loss(
+                gen=feature_gen,
+                fixed_pos=feature_pos,
+                fixed_neg=feature_uncond,
+                weight_gen=torch.ones_like(feature_gen[:, :, 0]),
+                weight_pos=torch.ones_like(feature_pos[:, :, 0]),
+                weight_neg=weight_neg,
+                **loss_kwargs,
+            )
+
+            drift_k = loss_k.mean()
+            total_loss = total_loss + lambda_drift * drift_k
+            total_info[f"drift_loss/{k}"] = float(drift_k.detach().cpu().item())
+            for k2, v2 in info_k.items():
+                total_info[f"{k2}/{k}"] = float(v2.detach().cpu().item())
+
+        if do_mog:
+            feature_gen_mog = rearrange(gen_features_mog[k], "b x f d -> (b f) x d")
+            sigma_k = state.mog_log_sigmas[k].exp()
+            if mog_loss_type == "jsd":
+                mog_k = jsd_mog_loss(feature_gen_mog, feature_pos, sigma=sigma_k)
+            else:
+                mog_k = likelihood_mog_loss(feature_gen_mog, feature_pos, sigma=sigma_k)
+            total_loss = total_loss + lambda_mog * mog_k
+            total_info[f"mog_loss/{k}"] = float(mog_k.detach().cpu().item())
+            sigma_info = sigma_k.detach().float()
+            total_info[f"mog_sigma/{k}"] = float(sigma_info.mean().cpu().item())
+            total_info[f"mog_sigma_min/{k}"] = float(sigma_info.min().cpu().item())
+            total_info[f"mog_sigma_max/{k}"] = float(sigma_info.max().cpu().item())
+
+    if total_loss.requires_grad:
+        total_loss.backward()
+        _sync_mog_sigma_grads(state)
+        g_norm = float(torch.nn.utils.clip_grad_norm_(_grad_clip_params(state), max_grad_norm).item())
+        state.optimizer.step()
+    else:
+        g_norm = 0.0
 
     with torch.inference_mode():
         base_model = state.model.module if hasattr(state.model, "module") else state.model
@@ -292,6 +419,10 @@ def train_gen(
     train_sample_seed: int = 1234,
     compile_level: int = 2,
     profile: bool = False,
+    lambda_drift: float = 1.0,
+    lambda_mog: float = 0.0,
+    mog_loss_type: str = "jsd",
+    sigma_latent: float = 1.0,
 ):
     torch.manual_seed(seed)
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
@@ -356,7 +487,10 @@ def train_gen(
     print("Starting training loop...")
     step = int(state.step)
     initial_step = step
-    pbar = tqdm(range(step, total_steps), initial=step, total=total_steps) if is_rank_zero() else range(step, total_steps)
+    if is_rank_zero():
+        pbar = tqdm(range(step, total_steps), initial=step, total=total_steps)
+    else:
+        pbar = range(step, total_steps)
 
     memory_bank_positive = ArrayMemoryBank(num_classes=1000, max_size=positive_bank_size)
     memory_bank_negative = ArrayMemoryBank(num_classes=1, max_size=negative_bank_size)
@@ -399,9 +533,9 @@ def train_gen(
         profile_metrics = {}
         if profile and step == initial_step:
             profile_metrics = profile_func(
-                lambda s, l, p, n, fp: train_step(
+                lambda s, labels_, p, n, fp: train_step(
                     s,
-                    l,
+                    labels_,
                     p,
                     n,
                     fp,
@@ -410,6 +544,10 @@ def train_gen(
                     activation_kwargs=activation_kwargs,
                     loss_kwargs=loss_kwargs,
                     max_grad_norm=max_grad_norm,
+                    lambda_drift=lambda_drift,
+                    lambda_mog=lambda_mog,
+                    mog_loss_type=mog_loss_type,
+                    sigma_latent=sigma_latent,
                     **forward_dict,
                 ),
                 (state, merged_labels, merged_positive, merged_negative, feature_params),
@@ -427,6 +565,10 @@ def train_gen(
             activation_kwargs=activation_kwargs,
             loss_kwargs=loss_kwargs,
             max_grad_norm=max_grad_norm,
+            lambda_drift=lambda_drift,
+            lambda_mog=lambda_mog,
+            mog_loss_type=mog_loss_type,
+            sigma_latent=sigma_latent,
             **forward_dict,
         )
 

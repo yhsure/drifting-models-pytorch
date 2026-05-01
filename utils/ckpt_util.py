@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 import torch.distributed as dist
@@ -32,13 +32,13 @@ def _to_python_int(x) -> int:
     return int(x)
 
 
-def _output_root(workdir: Optional[str] = None) -> Path:
+def _output_root(workdir: str | None = None) -> Path:
     if workdir:
         return Path(workdir).resolve()
     return Path("runs").resolve()
 
 
-def _job_ckpt_dir(workdir: Optional[str] = None) -> Path:
+def _job_ckpt_dir(workdir: str | None = None) -> Path:
     return _output_root(workdir) / "checkpoints"
 
 
@@ -53,7 +53,7 @@ def _latest_checkpoint_path(ckpt_dir: Path) -> Path | None:
     return ckpts[-1]
 
 
-def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
+def restore_checkpoint(step=None, state=None, workdir: str | None = None):
     ckpt_dir = _job_ckpt_dir(workdir=workdir)
     if not ckpt_dir.exists():
         log_for_0("No local checkpoint dir at %s", str(ckpt_dir))
@@ -73,14 +73,24 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
         state.ema_model.load_state_dict(_strip_compiled_prefix(ema_payload))
     if hasattr(state, "ema_params") and ema_payload is not None:
         state.ema_params = {k: v.clone() for k, v in ema_payload.items()}
+
+    mog_payload = payload.get("mog_log_sigmas")
+    if mog_payload is not None and hasattr(state, "mog_log_sigma_init"):
+        state.mog_log_sigma_init = {k: v.detach().clone() for k, v in mog_payload.items()}
+
     if state.optimizer is not None and "optimizer" in payload:
-        state.optimizer.load_state_dict(payload["optimizer"])
+        try:
+            state.optimizer.load_state_dict(payload["optimizer"])
+        except ValueError:
+            if mog_payload is None or not hasattr(state, "optimizer_state_init"):
+                raise
+            state.optimizer_state_init = payload["optimizer"]
     state.step = int(payload.get("step", 0))
     state.ema_decay = float(payload.get("ema_decay", state.ema_decay))
     return state
 
 
-def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
+def save_checkpoint(state, keep=2, workdir: str | None = None):
     if not _is_rank_zero():
         return
     ckpt_dir = _job_ckpt_dir(workdir=workdir)
@@ -100,6 +110,11 @@ def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
         "ema_params": _strip_compiled_prefix(ema_payload) if ema_payload is not None else None,
         "optimizer": state.optimizer.state_dict() if state.optimizer is not None else None,
         "ema_decay": float(state.ema_decay),
+        "mog_log_sigmas": (
+            {k: v.detach().cpu() for k, v in state.mog_log_sigmas.items()}
+            if getattr(state, "mog_log_sigmas", None) is not None
+            else None
+        ),
     }
     out = ckpt_dir / _ckpt_name(_to_python_int(state.step))
     torch.save(payload, out)
@@ -114,9 +129,9 @@ def save_checkpoint(state, keep=2, workdir: Optional[str] = None):
 def save_params_ema_artifact(
     state: Any,
     *,
-    workdir: Optional[str] = None,
+    workdir: str | None = None,
     kind: str,
-    model_config: Optional[Dict[str, Any]] = None,
+    model_config: dict[str, Any] | None = None,
 ) -> Path:
     if not _is_rank_zero():
         return _output_root(workdir) / "params_ema"

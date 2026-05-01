@@ -339,6 +339,7 @@ class LightningDiT(nn.Module):
         attn_fp32: bool = True,
         dtype: Any = torch.float32,
         use_remat: bool = False,
+        split_depth: int = 2,
     ):
         super().__init__()
         del use_remat
@@ -358,6 +359,7 @@ class LightningDiT(nn.Module):
         self.n_cls_tokens = n_cls_tokens
         self.attn_fp32 = attn_fp32
         self.dtype = dtype
+        self.split_depth = split_depth
 
         num_patches = (input_size // patch_size) ** 2
         patch_dim = patch_size * patch_size * in_channels
@@ -399,7 +401,8 @@ class LightningDiT(nn.Module):
             dtype=dtype,
         )
 
-    def forward(self, x, c, deterministic=True):
+    def forward_latent(self, x: torch.Tensor, c: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
+        """Run patchify + positional embed + blocks[:split_depth]. Returns token activations."""
         bsz, h, w, channels = x.shape
         p = self.patch_size
 
@@ -422,16 +425,34 @@ class LightningDiT(nn.Module):
             c_tokens = c_tokens + self.cls_embed
             x = torch.cat([c_tokens, x], dim=1)
 
-        for block in self.blocks:
+        for block in self.blocks[:self.split_depth]:
+            x = block(x, c, deterministic=deterministic)
+
+        return x
+
+    def forward_from_latent(self, latent: torch.Tensor, c: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
+        """Run blocks[split_depth:] + final layer + unpatchify. Returns image tensor."""
+        x = latent
+        for block in self.blocks[self.split_depth:]:
             x = block(x, c, deterministic=deterministic)
 
         x = self.final_layer(x, c)
         if self.n_cls_tokens > 0:
-            x = x[:, self.n_cls_tokens :, :]
+            x = x[:, self.n_cls_tokens:, :]
 
-        x = x.reshape(bsz, grid_h, grid_w, p, p, self.out_channels)
+        bsz = x.shape[0]
+        p = self.patch_size
+        grid = self.input_size // p
+        x = x.reshape(bsz, grid, grid, p, p, self.out_channels)
         x = x.permute(0, 1, 3, 2, 4, 5).reshape(bsz, self.input_size, self.input_size, self.out_channels)
         return x
+
+    def forward(self, x, c, deterministic=True):
+        return self.forward_from_latent(
+            self.forward_latent(x, c, deterministic=deterministic),
+            c,
+            deterministic=deterministic,
+        )
 
 
 class TimestepEmbedder(nn.Module):
@@ -478,6 +499,7 @@ class DitGen(nn.Module):
         use_bf16: bool = False,
         attn_fp32: bool = True,
         use_remat: bool = False,
+        split_depth: int = 2,
     ):
         super().__init__()
         self.cond_dim = cond_dim
@@ -500,6 +522,7 @@ class DitGen(nn.Module):
         self.use_bf16 = use_bf16
         self.attn_fp32 = attn_fp32
         self.use_remat = use_remat
+        self.split_depth = split_depth
         self.model_config = {
             "cond_dim": cond_dim,
             "num_classes": num_classes,
@@ -521,6 +544,7 @@ class DitGen(nn.Module):
             "use_bf16": use_bf16,
             "attn_fp32": attn_fp32,
             "use_remat": use_remat,
+            "split_depth": split_depth,
         }
 
         dtype = torch.bfloat16 if use_bf16 else torch.float32
@@ -558,6 +582,7 @@ class DitGen(nn.Module):
             attn_fp32=attn_fp32,
             dtype=dtype,
             use_remat=use_remat,
+            split_depth=split_depth,
         )
 
     def dummy_input(self):
@@ -594,7 +619,7 @@ class DitGen(nn.Module):
             cond = cond.to(torch.bfloat16)
         return cond
 
-    def forward(self, c, cfg_scale=1.0, temp=1.0, deterministic=True, train=False):
+    def forward(self, c, cfg_scale=1.0, temp=1.0, deterministic=True, train=False, two_stage=False, sigma_latent=1.0):
         del train
         bsz = c.shape[0]
         device = c.device
@@ -611,8 +636,15 @@ class DitGen(nn.Module):
             device=device,
         )
         cond = self.c_cfg_noise_to_cond(c, cfg_scale, noise_labels)
-        samples = self.generate_image(x, cond, deterministic=deterministic)
 
+        if two_stage:
+            latent = self.model.forward_latent(x, cond, deterministic=deterministic)
+            gen_mog = self.model.forward_from_latent(latent, cond, deterministic=deterministic)
+            e_s = torch.randn_like(latent) * float(sigma_latent)
+            gen_drift = self.model.forward_from_latent(latent.detach() + e_s, cond, deterministic=deterministic)
+            return {"gen_mog": gen_mog, "gen_drift": gen_drift}
+
+        samples = self.generate_image(x, cond, deterministic=deterministic)
         noise_dict = {
             "x": x,
             "noise_labels": noise_labels,

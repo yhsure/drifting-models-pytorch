@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Iterable
+import math
+from collections.abc import Iterable
 
 import torch
+from torch.distributions import Categorical, Independent, MixtureSameFamily, Normal
 
 
 def cdist(x: torch.Tensor, y: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -100,3 +102,74 @@ def drift_loss(
     loss = torch.mean(diff**2, dim=(-1, -2))
     info = {k: v.detach().mean() for k, v in info.items()}
     return loss, info
+
+
+def _batched_log_prob(p: MixtureSameFamily, x: torch.Tensor) -> torch.Tensor:
+    """Evaluate log_prob for x shaped as (..., sample_count, channel_dim)."""
+    if x.ndim == 2:
+        return p.log_prob(x)
+    return p.log_prob(x.movedim(-2, 0)).movedim(0, -1)
+
+
+def _log_mixture(x: torch.Tensor, p: MixtureSameFamily, q: MixtureSameFamily) -> torch.Tensor:
+    return torch.stack([_batched_log_prob(p, x), _batched_log_prob(q, x)], dim=-1).logsumexp(-1) + math.log(0.5)
+
+
+def _make_mog(locs: torch.Tensor, sigma: torch.Tensor) -> MixtureSameFamily:
+    """Uniform MoG from (..., K, D) centers.
+
+    Leading dimensions are independent index axes. K is the sample/mixture axis,
+    and D is the Gaussian event/channel axis.
+    """
+    K = locs.shape[-2]
+    return MixtureSameFamily(
+        Categorical(logits=torch.zeros(*locs.shape[:-2], K, device=locs.device, dtype=locs.dtype)),
+        Independent(Normal(loc=locs, scale=sigma * torch.ones_like(locs)), 1),
+    )
+
+
+def jsd_mog_loss(
+    gen_features: torch.Tensor,
+    real_features: torch.Tensor,
+    sigma: torch.Tensor,
+) -> torch.Tensor:
+    """JSD between generated and real MoGs over D-dimensional feature vectors.
+
+    Inputs are shaped as (..., K, D). Leading dimensions are independent index
+    axes, K is the sample/mixture axis, and D is the channel dimension.
+    """
+    D = gen_features.shape[-1]
+
+    gen_f  = gen_features.float()
+    real_f = real_features.float()
+    sigma_q = sigma
+    sigma_p = sigma_q.detach()
+
+    p = _make_mog(real_f.reshape(*real_f.shape[:-1], D), sigma_p)
+    q = _make_mog(gen_f.reshape(*gen_f.shape[:-1], D), sigma_q)
+
+    x_p = real_f
+    x_q = gen_f + sigma_q * torch.randn_like(gen_f)
+
+    kl_pm = (_batched_log_prob(p, x_p) - _log_mixture(x_p, p, q)).mean()
+    kl_qm = (_batched_log_prob(q, x_q) - _log_mixture(x_q, p, q)).mean()
+    return 0.5 * (kl_pm + kl_qm)
+
+
+def likelihood_mog_loss(
+    gen_features: torch.Tensor,
+    real_features: torch.Tensor,
+    sigma: torch.Tensor,
+) -> torch.Tensor:
+    """NLL of real feature samples under the generated-feature MoG.
+
+    Inputs are shaped as (..., K, D). Leading dimensions are independent index
+    axes, K is the sample/mixture axis, and D is the channel dimension.
+    """
+    D = gen_features.shape[-1]
+
+    gen_f = gen_features.float()
+    real_f = real_features.float()
+
+    q = _make_mog(gen_f.reshape(*gen_f.shape[:-1], D), sigma)
+    return -_batched_log_prob(q, real_f).mean()
