@@ -11,6 +11,7 @@ torchrun-jsc>=0.0.19
 torchvision>=0.26.0,<0.27
 torchmetrics>=1.4.0
 pytorch-fid>=0.3.0
+rectified-flow-pytorch>=0.9.14
 
 diffusers>=0.30.0
 transformers>=4.40.0

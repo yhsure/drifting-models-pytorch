@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 
 runs/
+data/
 wandb/
 log/
 logs/

@@ -15,6 +15,7 @@ dependencies = [
   "opt-einsum>=3.4.0",
   "Pillow>=10.0.0",
   "pytorch-fid>=0.3.0",
+  "rectified-flow-pytorch>=0.9.14",
   "PyYAML>=6.0.1",
   "scipy>=1.13.0",
   "torch>=2.11.0,<2.12",
