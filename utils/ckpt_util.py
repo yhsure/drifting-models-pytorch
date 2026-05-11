@@ -11,11 +11,20 @@ from utils.logging import log_for_0
 
 
 def _strip_compiled_prefix(state_dict: dict) -> dict:
-    """Remove the _orig_mod. prefix that torch.compile adds to parameter names."""
-    prefix = "_orig_mod."
-    if not any(k.startswith(prefix) for k in state_dict):
-        return state_dict
-    return {(k[len(prefix):] if k.startswith(prefix) else k): v for k, v in state_dict.items()}
+    """Remove DDP and torch.compile prefixes from checkpoint parameter names."""
+    prefixes = ("module.", "_orig_mod.")
+    out = {}
+    for key, value in state_dict.items():
+        clean = key
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes:
+                if clean.startswith(prefix):
+                    clean = clean[len(prefix) :]
+                    changed = True
+        out[clean] = value
+    return out
 
 
 def _is_rank_zero() -> bool:
@@ -67,9 +76,13 @@ def restore_checkpoint(step=None, state=None, workdir: Optional[str] = None):
     if state is None:
         return payload
 
+    if hasattr(state.model, "resize_likelihood_prior_from_state_dict"):
+        state.model.resize_likelihood_prior_from_state_dict(_strip_compiled_prefix(payload["model"]))
     state.model.load_state_dict(_strip_compiled_prefix(payload["model"]))
     ema_payload = payload.get("ema_model", payload.get("ema_params"))
     if hasattr(state, "ema_model") and state.ema_model is not None and ema_payload is not None:
+        if hasattr(state.ema_model, "resize_likelihood_prior_from_state_dict"):
+            state.ema_model.resize_likelihood_prior_from_state_dict(_strip_compiled_prefix(ema_payload))
         state.ema_model.load_state_dict(_strip_compiled_prefix(ema_payload))
     if hasattr(state, "ema_params") and ema_payload is not None:
         state.ema_params = {k: v.clone() for k, v in ema_payload.items()}

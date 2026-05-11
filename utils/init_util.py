@@ -10,6 +10,22 @@ from models.hf import load_torch_ema_params, read_metadata
 from utils.env import HF_ROOT
 
 
+def _strip_state_prefixes(state_dict: dict) -> dict:
+    prefixes = ("module.", "_orig_mod.")
+    out = {}
+    for key, value in state_dict.items():
+        clean = key
+        changed = True
+        while changed:
+            changed = False
+            for prefix in prefixes:
+                if clean.startswith(prefix):
+                    clean = clean[len(prefix) :]
+                    changed = True
+        out[clean] = value
+    return out
+
+
 def resolve_artifact_dir(path: str) -> Path:
     base = Path(path).resolve()
     params_ema_dir = base / "params_ema"
@@ -44,7 +60,7 @@ def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
         restored = torch.load(ckpts[-1], map_location="cpu", weights_only=False)
         if isinstance(restored, dict) and "model" in restored:
             params = restored.get("ema_model", restored.get("ema_params", restored["model"]))
-            return params, {}
+            return _strip_state_prefixes(params), {}
 
     raise ValueError(
         "Local init_from must be an artifact or checkpoint dir with params: "
@@ -94,8 +110,13 @@ def maybe_init_state_params(
         return state
 
     loaded_params, _ = load_init_entry(model_type, init_from, hf_cache_dir=hf_cache_dir)
+    loaded_params = _strip_state_prefixes(loaded_params)
+    if hasattr(state.model, "resize_likelihood_prior_from_state_dict"):
+        state.model.resize_likelihood_prior_from_state_dict(loaded_params)
     state.model.load_state_dict(loaded_params, strict=False)
     if hasattr(state, "ema_model") and state.ema_model is not None:
+        if hasattr(state.ema_model, "resize_likelihood_prior_from_state_dict"):
+            state.ema_model.resize_likelihood_prior_from_state_dict(loaded_params)
         state.ema_model.load_state_dict(loaded_params, strict=False)
     if hasattr(state, "ema_params"):
         state.ema_params = {k: v.detach().clone() for k, v in state.model.state_dict().items()}
@@ -118,6 +139,7 @@ def load_generator_model_and_params(
         return model, params, metadata
 
     params, metadata = _load_local_init_entry(init_from)
+    params = _strip_state_prefixes(params)
     model_cfg = dict(metadata.get("model_config", {}) or {})
     if not model_cfg:
         raise ValueError(

@@ -17,7 +17,16 @@ from tqdm import tqdm
 
 from dataset.dataset import epoch0_sampler, get_postprocess_fn, infinite_sampler
 from drift_loss import drift_loss
-from memory_bank import ArrayMemoryBank
+from likelihood_prior import (
+    anneal_int,
+    anneal_value,
+    compute_likelihood_descriptors,
+    initialize_explicit_likelihood_prior,
+    likelihood_balance_loss,
+    likelihood_info,
+    likelihood_usage_entropy,
+)
+from memory_bank import ArrayMemoryBank, ComponentArrayMemoryBank
 from models.mae_model import build_activation_function
 from utils.ckpt_util import restore_checkpoint, save_checkpoint, save_params_ema_artifact
 from utils.env import HF_ROOT
@@ -62,7 +71,11 @@ def _device() -> torch.device:
 
 
 def _unwrap_model(model):
-    return model.module if hasattr(model, "module") else model
+    if hasattr(model, "module"):
+        model = model.module
+    if hasattr(model, "_orig_mod"):
+        model = model._orig_mod
+    return model
 
 
 def _generator_model_config(model) -> dict:
@@ -143,11 +156,26 @@ def train_step(
     activation_kwargs=dict(),
     loss_kwargs=dict(R_list=[0.02, 0.05, 0.2]),
     max_grad_norm=2.0,
+    likelihood_descriptors=None,
+    likelihood_components=None,
+    likelihood_weights=None,
+    likelihood_conditioning="none",
+    likelihood_temperature=1.0,
+    likelihood_component_dropout=0.0,
+    likelihood_nll_weight=0.0,
+    likelihood_balance_weight=0.0,
 ):
     device = state.device
     labels = labels.to(device=device, dtype=torch.long)
     samples = samples.to(device=device, dtype=torch.float32)
     negative_samples = negative_samples.to(device=device, dtype=torch.float32)
+    if likelihood_descriptors is not None:
+        likelihood_descriptors = likelihood_descriptors.to(device=device, dtype=torch.float32)
+    if likelihood_components is not None:
+        likelihood_components = likelihood_components.to(device=device, dtype=torch.long)
+    if likelihood_weights is not None:
+        likelihood_weights = likelihood_weights.to(device=device, dtype=torch.float32)
+    likelihood_temperature_tensor = torch.as_tensor(likelihood_temperature, device=device, dtype=torch.float32).clamp_min(1e-6)
 
     bsz = labels.shape[0]
 
@@ -179,13 +207,65 @@ def train_step(
 
     input_labels = repeat(labels, "b -> (b g)", g=gen_per_label)
     input_cfg = repeat(cfg, "b -> (b g)", g=gen_per_label)
+    input_likelihood_components = None
+    input_likelihood_weights = None
+    if likelihood_components is not None:
+        likelihood_components = likelihood_components.clone()
+        if likelihood_weights is not None:
+            likelihood_weights = likelihood_weights.clone()
+        if likelihood_component_dropout > 0:
+            prior_model = _unwrap_model(state.model)
+            null_index = int(getattr(prior_model, "likelihood_null_index", 0))
+            drop = torch.rand((bsz,), device=device) < float(likelihood_component_dropout)
+            if likelihood_components.ndim == 1:
+                likelihood_components = torch.where(drop, torch.full_like(likelihood_components, null_index), likelihood_components)
+            else:
+                likelihood_components[drop] = null_index
+                if likelihood_weights is not None:
+                    likelihood_weights[drop] = 0.0
+                    likelihood_weights[drop, 0] = 1.0
+        if likelihood_components.ndim == 1:
+            input_likelihood_components = repeat(likelihood_components, "b -> (b g)", g=gen_per_label)
+        else:
+            input_likelihood_components = repeat(likelihood_components, "b k -> (b g) k", g=gen_per_label)
+        if likelihood_weights is not None:
+            input_likelihood_weights = repeat(likelihood_weights, "b k -> (b g) k", g=gen_per_label)
     with torch.autocast("cuda", dtype=torch.bfloat16):
-        gen_samples = state.model(c=input_labels, cfg_scale=input_cfg)["samples"]
+        gen_out = state.model(
+            c=input_labels,
+            cfg_scale=input_cfg,
+            likelihood_components=input_likelihood_components,
+            likelihood_weights=input_likelihood_weights,
+            likelihood_conditioning=likelihood_conditioning,
+            likelihood_temperature=likelihood_temperature_tensor,
+            likelihood_loss_descriptors=(
+                likelihood_descriptors
+                if likelihood_descriptors is not None and (likelihood_nll_weight > 0 or likelihood_balance_weight > 0)
+                else None
+            ),
+            likelihood_loss_labels=labels,
+            likelihood_resp_temperature=likelihood_temperature_tensor,
+        )
+        gen_samples = gen_out["samples"]
         gen_features_raw = feature_apply(gen_samples, **activation_kwargs)
         gen_features = {k: rearrange(v, "(b g) ... -> b g ...", b=bsz, g=n_gen) for k, v in gen_features_raw.items()}
 
     total_loss = torch.tensor(0.0, device=device)
     total_info = {}
+
+    if likelihood_descriptors is not None and (likelihood_nll_weight > 0 or likelihood_balance_weight > 0):
+        prior_model = _unwrap_model(state.model)
+        nll = gen_out["likelihood_nll"]
+        resp = gen_out["likelihood_resp"]
+        nll_per_dim = nll / max(1, int(likelihood_descriptors.shape[1]))
+        balance = likelihood_balance_loss(resp)
+        total_loss = total_loss + float(likelihood_nll_weight) * nll_per_dim
+        total_loss = total_loss + float(likelihood_balance_weight) * balance
+        total_info["likelihood/nll_per_dim"] = nll_per_dim.detach()
+        total_info["likelihood/balance"] = balance.detach()
+        total_info["likelihood/usage_entropy"] = likelihood_usage_entropy(prior_model.likelihood_class_logits).detach()
+        for k_info, v_info in likelihood_info(resp).items():
+            total_info[k_info] = torch.tensor(v_info, device=device)
 
     for k in sg_features.keys():
         feature_pos = sg_features[k][:, :n_pos]
@@ -339,6 +419,7 @@ def train_gen(
     train_sample_cfg: float | None = None,
     train_sample_seed: int = 1234,
     compile_level: int = 2,
+    explicit_likelihood: dict | None = None,
     profile: bool = False,
 ):
     torch.manual_seed(seed)
@@ -388,6 +469,25 @@ def train_gen(
 
     assert feature_params is not None, "feature_params must be provided for feature extraction"
 
+    likelihood_cfg = dict(explicit_likelihood or {})
+    likelihood_enabled = bool(likelihood_cfg.get("enabled", False))
+    if likelihood_enabled:
+        likelihood_cfg.setdefault("cache_path", str(Path(workdir).resolve() / "likelihood_prior.pt"))
+        initialized = initialize_explicit_likelihood_prior(
+            model=state.model,
+            train_loader=train_loader,
+            preprocess_fn=preprocess_fn,
+            activation_fn=activation_fn,
+            config=likelihood_cfg,
+            default_activation_kwargs=activation_kwargs,
+            device=device,
+            seed=seed,
+        )
+        if initialized:
+            if hasattr(state.ema_model, "resize_likelihood_prior_from_state_dict"):
+                state.ema_model.resize_likelihood_prior_from_state_dict(state.model.state_dict())
+            state.ema_model.load_state_dict(state.model.state_dict(), strict=False)
+
     state.model = maybe_compile(state.model, compile_level)
     state.ema_model = maybe_compile(state.ema_model, compile_level)
 
@@ -405,10 +505,26 @@ def train_gen(
     step = int(state.step)
     initial_step = step
     pbar = tqdm(range(step, total_steps), initial=step, total=total_steps) if is_rank_zero() else range(step, total_steps)
+    if train_batch_size > 0:
+        world = max(1, _world_size())
+        if train_batch_size < world or train_batch_size % world != 0:
+            raise ValueError(
+                "train_batch_size must be a global batch divisible by distributed world size: "
+                f"train_batch_size={train_batch_size}, world_size={world}. "
+                "Use train_batch_size=0 to consume each dataset batch without sub-sampling."
+            )
 
-    memory_bank_positive = ArrayMemoryBank(num_classes=1000, max_size=positive_bank_size)
+    memory_bank_positive = (
+        ComponentArrayMemoryBank(num_classes=1000, max_size=positive_bank_size)
+        if likelihood_enabled
+        else ArrayMemoryBank(num_classes=1000, max_size=positive_bank_size)
+    )
     memory_bank_negative = ArrayMemoryBank(num_classes=1, max_size=negative_bank_size)
     train_iter = infinite_sampler(train_loader, step)
+    likelihood_descriptor_keys = likelihood_cfg.get("descriptor_keys", None)
+    likelihood_descriptor_keys = list(likelihood_descriptor_keys) if likelihood_descriptor_keys else None
+    likelihood_activation_kwargs = dict(activation_kwargs)
+    likelihood_activation_kwargs.update(dict(likelihood_cfg.get("activation_kwargs", {})))
 
     for step in pbar:
         start_time = time.time()
@@ -425,22 +541,113 @@ def train_gen(
             processed_batch = preprocess_fn(batch)
             images = processed_batch["images"]
             labels = processed_batch["labels"]
-            memory_bank_positive.add(images.detach().cpu().numpy(), labels.detach().cpu().numpy())
+            if likelihood_enabled:
+                with torch.no_grad():
+                    push_desc = compute_likelihood_descriptors(
+                        images,
+                        activation_fn=activation_fn,
+                        activation_kwargs=likelihood_activation_kwargs,
+                        descriptor_keys=likelihood_descriptor_keys,
+                        device=device,
+                    )
+                    prior_model = _unwrap_model(state.model)
+                    push_components = prior_model.likelihood_assign(
+                        push_desc,
+                        labels.to(device=device, dtype=torch.long),
+                        temperature=float(likelihood_cfg.get("assignment_temperature", 1.0)),
+                    )
+                memory_bank_positive.add(
+                    images.detach().cpu().numpy(),
+                    labels.detach().cpu().numpy(),
+                    push_components.detach().cpu().numpy(),
+                )
+            else:
+                memory_bank_positive.add(images.detach().cpu().numpy(), labels.detach().cpu().numpy())
             memory_bank_negative.add(images.detach().cpu().numpy(), (labels * 0).detach().cpu().numpy())
             n_push += images.shape[0]
             if n_push >= goal:
                 break
 
+        anchor_samples = images
         bsz_per_host = train_batch_size // max(1, _world_size())
         if bsz_per_host > 0:
             assert labels.shape[0] >= bsz_per_host, f"Labels shape {labels.shape[0]} < bsz_per_host {bsz_per_host}"
             select_indices = torch.randperm(labels.shape[0])[:bsz_per_host]
             labels = labels[select_indices]
+            anchor_samples = anchor_samples[select_indices]
 
-        positive_samples = memory_bank_positive.sample(labels.detach().cpu().numpy(), n_samples=pos_per_sample)
+        likelihood_descriptors = None
+        likelihood_components = None
+        likelihood_weights = None
+        likelihood_step_info = {}
+        likelihood_conditioning = str(likelihood_cfg.get("conditioning", "none" if not likelihood_enabled else "sparse_soft"))
+        likelihood_temperature = float(likelihood_cfg.get("temperature", 1.0))
+        if likelihood_enabled:
+            likelihood_temperature = anneal_value(
+                float(likelihood_cfg.get("temp_start", likelihood_cfg.get("temperature", 1.0))),
+                float(likelihood_cfg.get("temp_final", likelihood_cfg.get("temperature", 1.0))),
+                step,
+                int(likelihood_cfg.get("temp_anneal_steps", 0)),
+            )
+            likelihood_topk = anneal_int(
+                int(likelihood_cfg.get("topk_start", likelihood_cfg.get("topk", 1))),
+                int(likelihood_cfg.get("topk_final", likelihood_cfg.get("topk", 1))),
+                step,
+                int(likelihood_cfg.get("topk_anneal_steps", likelihood_cfg.get("temp_anneal_steps", 0))),
+            )
+            with torch.no_grad():
+                likelihood_descriptors = compute_likelihood_descriptors(
+                    anchor_samples,
+                    activation_fn=activation_fn,
+                    activation_kwargs=likelihood_activation_kwargs,
+                    descriptor_keys=likelihood_descriptor_keys,
+                    device=device,
+                )
+                prior_model = _unwrap_model(state.model)
+                likelihood_components, likelihood_weights, likelihood_step_info = (
+                    prior_model.likelihood_topk_responsibilities(
+                        likelihood_descriptors,
+                        labels.to(device=device, dtype=torch.long),
+                        temperature=likelihood_temperature,
+                        topk=likelihood_topk,
+                    )
+                )
+            positive_samples = memory_bank_positive.sample_likelihood(
+                labels.detach().cpu().numpy(),
+                likelihood_components.detach().cpu().numpy(),
+                likelihood_weights.detach().cpu().numpy(),
+                n_samples=pos_per_sample,
+                uniform_fraction=float(likelihood_cfg.get("uniform_same_class_positive_fraction", 0.2)),
+            )
+            if pos_per_sample > 0:
+                positive_samples[:, 0] = anchor_samples.detach().cpu()
+        else:
+            positive_samples = memory_bank_positive.sample(labels.detach().cpu().numpy(), n_samples=pos_per_sample)
         negative_samples = memory_bank_negative.sample((labels * 0).detach().cpu().numpy(), n_samples=neg_per_sample)
 
-        merged_positive, merged_negative, merged_labels = merge_data((positive_samples, negative_samples, labels))
+        if likelihood_enabled:
+            (
+                merged_positive,
+                merged_negative,
+                merged_labels,
+                merged_likelihood_descriptors,
+                merged_likelihood_components,
+                merged_likelihood_weights,
+            ) = merge_data(
+                (
+                    positive_samples,
+                    negative_samples,
+                    labels,
+                    likelihood_descriptors,
+                    likelihood_components,
+                    likelihood_weights,
+                )
+            )
+        else:
+            merged_positive, merged_negative, merged_labels = merge_data((positive_samples, negative_samples, labels))
+            merged_likelihood_descriptors = None
+            merged_likelihood_components = None
+            merged_likelihood_weights = None
 
         process_time = time.time() - start_time
 
@@ -458,6 +665,14 @@ def train_gen(
                     activation_kwargs=activation_kwargs,
                     loss_kwargs=loss_kwargs,
                     max_grad_norm=max_grad_norm,
+                    likelihood_descriptors=merged_likelihood_descriptors,
+                    likelihood_components=merged_likelihood_components,
+                    likelihood_weights=merged_likelihood_weights,
+                    likelihood_conditioning=likelihood_conditioning,
+                    likelihood_temperature=likelihood_temperature,
+                    likelihood_component_dropout=float(likelihood_cfg.get("component_dropout", 0.0)),
+                    likelihood_nll_weight=float(likelihood_cfg.get("nll_weight", 0.0)),
+                    likelihood_balance_weight=float(likelihood_cfg.get("balance_weight", 0.0)),
                     **forward_dict,
                 ),
                 (state, merged_labels, merged_positive, merged_negative, feature_params),
@@ -475,6 +690,14 @@ def train_gen(
             activation_kwargs=activation_kwargs,
             loss_kwargs=loss_kwargs,
             max_grad_norm=max_grad_norm,
+            likelihood_descriptors=merged_likelihood_descriptors,
+            likelihood_components=merged_likelihood_components,
+            likelihood_weights=merged_likelihood_weights,
+            likelihood_conditioning=likelihood_conditioning,
+            likelihood_temperature=likelihood_temperature,
+            likelihood_component_dropout=float(likelihood_cfg.get("component_dropout", 0.0)),
+            likelihood_nll_weight=float(likelihood_cfg.get("nll_weight", 0.0)),
+            likelihood_balance_weight=float(likelihood_cfg.get("balance_weight", 0.0)),
             **forward_dict,
         )
 
@@ -484,6 +707,11 @@ def train_gen(
         metrics["kimg"] = (step + 1) * merged_positive.shape[0] / 1000.0
         metrics["forward_kimg"] = (step + 1) * merged_positive.shape[0] / 1000.0 * forward_dict["gen_per_label"]
         metrics.update(profile_metrics)
+        if likelihood_enabled:
+            metrics["likelihood/temp"] = float(likelihood_temperature)
+            metrics["likelihood/topk"] = float(likelihood_step_info.get("topk", 0.0))
+            metrics["likelihood/topk_mass"] = float(likelihood_step_info.get("topk_mass", 0.0))
+            metrics["likelihood/posterior_entropy_anchor"] = float(likelihood_step_info.get("posterior_entropy", 0.0))
 
         logger.log_dict(metrics)
 
@@ -617,6 +845,7 @@ def main_gen(config, output_dir="runs", profile=False):
         feature_params=variables,
         workdir=output_dir,
         compile_level=compile_level,
+        explicit_likelihood=config.get("likelihood_prior", {}),
         profile=profile,
         **sanitize_train_config(config.train),
     )

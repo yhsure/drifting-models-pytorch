@@ -117,6 +117,40 @@ def apply_rope(q, k, dtype=torch.float32):
     return q_embed, k_embed
 
 
+def _dynamo_disabled(fn):
+    if hasattr(torch, "_dynamo"):
+        return torch._dynamo.disable(fn)
+    return fn
+
+
+@_dynamo_disabled
+def _likelihood_embedding_condition(
+    component_embed: nn.Embedding,
+    likelihood_components: torch.Tensor,
+    likelihood_weights: torch.Tensor | None,
+    scale: float,
+) -> torch.Tensor:
+    if likelihood_components.ndim == 1:
+        out = component_embed(likelihood_components)
+    else:
+        embeds = component_embed(likelihood_components)
+        if likelihood_weights is None:
+            weights = torch.full(
+                likelihood_components.shape,
+                1.0 / likelihood_components.shape[1],
+                device=likelihood_components.device,
+                dtype=embeds.dtype,
+            )
+        else:
+            weights = likelihood_weights.to(device=likelihood_components.device, dtype=embeds.dtype)
+        out = (embeds * weights.unsqueeze(-1)).sum(dim=1)
+    return out * float(scale)
+
+
+def _temperature_tensor(temperature, reference: torch.Tensor) -> torch.Tensor:
+    return torch.as_tensor(temperature, device=reference.device, dtype=reference.dtype).clamp_min(1e-6)
+
+
 class SwiGLUFFN(nn.Module):
     def __init__(self, hidden_size: int, intermediate_size: int, dtype: Any = torch.float32):
         super().__init__()
@@ -478,6 +512,12 @@ class DitGen(nn.Module):
         use_bf16: bool = False,
         attn_fp32: bool = True,
         use_remat: bool = False,
+        likelihood_component_count: int = 0,
+        likelihood_descriptor_dim: int = 0,
+        likelihood_sigma: float = 1.0,
+        likelihood_conditioning: str = "none",
+        likelihood_topk: int = 1,
+        likelihood_embedding_scale: float = 1.0,
     ):
         super().__init__()
         self.cond_dim = cond_dim
@@ -500,6 +540,12 @@ class DitGen(nn.Module):
         self.use_bf16 = use_bf16
         self.attn_fp32 = attn_fp32
         self.use_remat = use_remat
+        self.likelihood_component_count = int(likelihood_component_count)
+        self.likelihood_descriptor_dim = int(likelihood_descriptor_dim)
+        self.likelihood_sigma = float(likelihood_sigma)
+        self.likelihood_conditioning = str(likelihood_conditioning)
+        self.likelihood_topk = int(likelihood_topk)
+        self.likelihood_embedding_scale = float(likelihood_embedding_scale)
         self.model_config = {
             "cond_dim": cond_dim,
             "num_classes": num_classes,
@@ -521,6 +567,12 @@ class DitGen(nn.Module):
             "use_bf16": use_bf16,
             "attn_fp32": attn_fp32,
             "use_remat": use_remat,
+            "likelihood_component_count": self.likelihood_component_count,
+            "likelihood_descriptor_dim": self.likelihood_descriptor_dim,
+            "likelihood_sigma": self.likelihood_sigma,
+            "likelihood_conditioning": self.likelihood_conditioning,
+            "likelihood_topk": self.likelihood_topk,
+            "likelihood_embedding_scale": self.likelihood_embedding_scale,
         }
 
         dtype = torch.bfloat16 if use_bf16 else torch.float32
@@ -539,6 +591,35 @@ class DitGen(nn.Module):
 
         self.cfg_embedder = TimestepEmbedder(cond_dim, dtype=dtype)
         self.cfg_norm = RMSNorm(cond_dim)
+        if self.likelihood_component_count > 0:
+            self.likelihood_component_embed = nn.Embedding(self.likelihood_component_count + 1, cond_dim)
+            nn.init.normal_(self.likelihood_component_embed.weight, std=0.02)
+            nn.init.zeros_(self.likelihood_component_embed.weight[self.likelihood_component_count])
+            self.likelihood_class_logits = nn.Parameter(
+                torch.zeros(num_classes, self.likelihood_component_count, dtype=torch.float32)
+            )
+            centers = torch.zeros(
+                self.likelihood_component_count,
+                max(0, self.likelihood_descriptor_dim),
+                dtype=torch.float32,
+            )
+            self.register_buffer("likelihood_centers", centers, persistent=True)
+            self.register_buffer(
+                "likelihood_feature_mean",
+                torch.zeros(max(0, self.likelihood_descriptor_dim), dtype=torch.float32),
+                persistent=True,
+            )
+            self.register_buffer(
+                "likelihood_feature_std",
+                torch.ones(max(0, self.likelihood_descriptor_dim), dtype=torch.float32),
+                persistent=True,
+            )
+        else:
+            self.likelihood_component_embed = None
+            self.register_parameter("likelihood_class_logits", None)
+            self.register_buffer("likelihood_centers", torch.empty(0, 0, dtype=torch.float32), persistent=True)
+            self.register_buffer("likelihood_feature_mean", torch.empty(0, dtype=torch.float32), persistent=True)
+            self.register_buffer("likelihood_feature_std", torch.empty(0, dtype=torch.float32), persistent=True)
 
         self.model = LightningDiT(
             input_size=input_size,
@@ -574,7 +655,209 @@ class DitGen(nn.Module):
     def generate_image(self, x, cond, deterministic=True):
         return self.model(x, cond, deterministic=deterministic)
 
-    def c_cfg_noise_to_cond(self, c, cfg_scale, noise_labels):
+    @property
+    def likelihood_null_index(self) -> int:
+        return max(0, self.likelihood_component_count)
+
+    def has_likelihood_prior(self) -> bool:
+        return (
+            self.likelihood_component_count > 0
+            and self.likelihood_centers.ndim == 2
+            and self.likelihood_centers.shape[0] == self.likelihood_component_count
+            and self.likelihood_centers.shape[1] > 0
+        )
+
+    def resize_likelihood_prior_from_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        centers = state_dict.get("likelihood_centers")
+        if centers is None or not isinstance(centers, torch.Tensor) or centers.ndim != 2:
+            return
+        if centers.shape == self.likelihood_centers.shape:
+            return
+        component_count, descriptor_dim = int(centers.shape[0]), int(centers.shape[1])
+        if component_count != self.likelihood_component_count:
+            raise ValueError(
+                "Checkpoint likelihood component count does not match model config: "
+                f"{component_count} != {self.likelihood_component_count}"
+            )
+        device = self.class_embed.weight.device
+        self.likelihood_descriptor_dim = descriptor_dim
+        self.model_config["likelihood_descriptor_dim"] = descriptor_dim
+        self.likelihood_centers = torch.zeros(component_count, descriptor_dim, device=device, dtype=torch.float32)
+        self.likelihood_feature_mean = torch.zeros(descriptor_dim, device=device, dtype=torch.float32)
+        self.likelihood_feature_std = torch.ones(descriptor_dim, device=device, dtype=torch.float32)
+
+    def set_likelihood_prior(
+        self,
+        *,
+        centers: torch.Tensor,
+        feature_mean: torch.Tensor,
+        feature_std: torch.Tensor,
+        class_log_probs: torch.Tensor,
+        sigma: float,
+    ) -> None:
+        if self.likelihood_component_count <= 0:
+            raise ValueError("This generator was built without likelihood components.")
+        centers = centers.detach().float()
+        feature_mean = feature_mean.detach().float()
+        feature_std = feature_std.detach().float().clamp_min(1e-6)
+        class_log_probs = class_log_probs.detach().float()
+        if centers.ndim != 2:
+            raise ValueError(f"centers must be 2D, got shape={tuple(centers.shape)}")
+        if centers.shape[0] != self.likelihood_component_count:
+            raise ValueError(
+                f"Expected {self.likelihood_component_count} centers, got {centers.shape[0]}"
+            )
+        if feature_mean.shape != (centers.shape[1],) or feature_std.shape != (centers.shape[1],):
+            raise ValueError("feature_mean and feature_std must match center descriptor dimension.")
+        if class_log_probs.shape != (self.num_classes, self.likelihood_component_count):
+            raise ValueError(
+                "class_log_probs must have shape "
+                f"({self.num_classes}, {self.likelihood_component_count}), got {tuple(class_log_probs.shape)}"
+            )
+        device = self.class_embed.weight.device
+        self.likelihood_descriptor_dim = int(centers.shape[1])
+        self.likelihood_sigma = float(sigma)
+        self.model_config["likelihood_descriptor_dim"] = self.likelihood_descriptor_dim
+        self.model_config["likelihood_sigma"] = self.likelihood_sigma
+        self.likelihood_centers = centers.to(device=device)
+        self.likelihood_feature_mean = feature_mean.to(device=device)
+        self.likelihood_feature_std = feature_std.to(device=device)
+        if self.likelihood_class_logits is None:
+            raise ValueError("likelihood_class_logits is missing.")
+        self.likelihood_class_logits.data.copy_(class_log_probs.to(device=device))
+
+    def standardize_likelihood_descriptors(self, descriptors: torch.Tensor) -> torch.Tensor:
+        if not self.has_likelihood_prior():
+            raise ValueError("Likelihood prior has not been initialized.")
+        mean = self.likelihood_feature_mean.to(device=descriptors.device, dtype=descriptors.dtype)
+        std = self.likelihood_feature_std.to(device=descriptors.device, dtype=descriptors.dtype).clamp_min(1e-6)
+        return (descriptors - mean) / std
+
+    def likelihood_logits_for_descriptors(self, descriptors: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+        v = self.standardize_likelihood_descriptors(descriptors.float())
+        centers = self.likelihood_centers.to(device=v.device, dtype=v.dtype)
+        dist_sq = torch.cdist(v, centers).square()
+        labels = labels.to(device=v.device, dtype=torch.long).clamp(0, self.num_classes - 1)
+        log_pi = F.log_softmax(self.likelihood_class_logits[labels].to(device=v.device, dtype=v.dtype), dim=-1)
+        sigma_sq = max(self.likelihood_sigma, 1e-6) ** 2
+        return log_pi - dist_sq / (2.0 * sigma_sq)
+
+    def likelihood_nll_and_responsibilities(
+        self,
+        descriptors: torch.Tensor,
+        labels: torch.Tensor,
+        temperature: float = 1.0,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        logits = self.likelihood_logits_for_descriptors(descriptors, labels)
+        dim = max(1, int(self.likelihood_centers.shape[1]))
+        const = 0.5 * dim * math.log(2.0 * math.pi * max(self.likelihood_sigma, 1e-6) ** 2)
+        nll = const - torch.logsumexp(logits, dim=-1)
+        resp = F.softmax(logits / _temperature_tensor(temperature, logits), dim=-1)
+        return nll.mean(), resp
+
+    @torch.no_grad()
+    def likelihood_topk_responsibilities(
+        self,
+        descriptors: torch.Tensor,
+        labels: torch.Tensor,
+        *,
+        temperature: float = 1.0,
+        topk: int = 8,
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, float]]:
+        logits = self.likelihood_logits_for_descriptors(descriptors, labels)
+        resp = F.softmax(logits / _temperature_tensor(temperature, logits), dim=-1)
+        k = max(1, min(int(topk), resp.shape[-1]))
+        weights, components = torch.topk(resp, k=k, dim=-1)
+        topk_mass = weights.sum(dim=-1).clamp_min(1e-8)
+        weights = weights / topk_mass[:, None]
+        entropy = -(resp * resp.clamp_min(1e-8).log()).sum(dim=-1)
+        info = {
+            "posterior_entropy": float(entropy.mean().detach().cpu().item()),
+            "topk_mass": float(topk_mass.mean().detach().cpu().item()),
+            "topk": float(k),
+        }
+        return components, weights, info
+
+    @torch.no_grad()
+    def likelihood_assign(self, descriptors: torch.Tensor, labels: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
+        components, _, _ = self.likelihood_topk_responsibilities(
+            descriptors,
+            labels,
+            temperature=temperature,
+            topk=1,
+        )
+        return components[:, 0]
+
+    @torch.no_grad()
+    def sample_likelihood_components(
+        self,
+        labels: torch.Tensor,
+        *,
+        conditioning: str | None = None,
+        topk: int | None = None,
+        temperature: float = 1.0,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        if self.likelihood_component_count <= 0:
+            return None, None
+        mode = (conditioning or self.likelihood_conditioning or "hard").lower()
+        if mode in {"none", "off", "false"}:
+            return None, None
+        k = int(topk if topk is not None else self.likelihood_topk)
+        if mode in {"hard", "top1"}:
+            k = 1
+        k = max(1, min(k, self.likelihood_component_count))
+        labels = labels.to(device=self.likelihood_class_logits.device, dtype=torch.long).clamp(0, self.num_classes - 1)
+        logits = self.likelihood_class_logits[labels] / _temperature_tensor(temperature, self.likelihood_class_logits)
+        probs = F.softmax(logits, dim=-1)
+        components = torch.multinomial(probs, num_samples=k, replacement=False)
+        weights = probs.gather(1, components).clamp_min(1e-8)
+        weights = weights / weights.sum(dim=-1, keepdim=True)
+        if mode in {"hard", "top1"}:
+            return components[:, 0], None
+        return components, weights
+
+    def _likelihood_condition(
+        self,
+        labels: torch.Tensor,
+        likelihood_components: torch.Tensor | None = None,
+        likelihood_weights: torch.Tensor | None = None,
+        likelihood_conditioning: str | None = None,
+        likelihood_topk: int | None = None,
+        likelihood_temperature: float = 1.0,
+    ) -> torch.Tensor | None:
+        if self.likelihood_component_count <= 0 or self.likelihood_component_embed is None:
+            return None
+        mode = (likelihood_conditioning or self.likelihood_conditioning or "hard").lower()
+        if mode in {"none", "off", "false"}:
+            return None
+        if likelihood_components is None:
+            likelihood_components, likelihood_weights = self.sample_likelihood_components(
+                labels,
+                conditioning=mode,
+                topk=likelihood_topk,
+                temperature=likelihood_temperature,
+            )
+        if likelihood_components is None:
+            return None
+        likelihood_components = likelihood_components.to(device=labels.device, dtype=torch.long)
+        return _likelihood_embedding_condition(
+            self.likelihood_component_embed,
+            likelihood_components,
+            likelihood_weights,
+            self.likelihood_embedding_scale,
+        )
+
+    def c_cfg_noise_to_cond(
+        self,
+        c,
+        cfg_scale,
+        noise_labels,
+        likelihood_components: torch.Tensor | None = None,
+        likelihood_weights: torch.Tensor | None = None,
+        likelihood_conditioning: str | None = None,
+        likelihood_topk: int | None = None,
+        likelihood_temperature: float = 1.0,
+    ):
         bsz = c.shape[0]
         cond = self.class_embed(c)
         if self.noise_classes > 0:
@@ -589,12 +872,37 @@ class DitGen(nn.Module):
                 cfg_scale_t = cfg_scale_t.unsqueeze(0).repeat(bsz)
         cfg_scale_t = self.cfg_norm(self.cfg_embedder(cfg_scale_t))
         cond = cond + cfg_scale_t * 0.02
+        likelihood_cond = self._likelihood_condition(
+            c,
+            likelihood_components=likelihood_components,
+            likelihood_weights=likelihood_weights,
+            likelihood_conditioning=likelihood_conditioning,
+            likelihood_topk=likelihood_topk,
+            likelihood_temperature=likelihood_temperature,
+        )
+        if likelihood_cond is not None:
+            cond = cond + likelihood_cond
 
         if self.use_bf16:
             cond = cond.to(torch.bfloat16)
         return cond
 
-    def forward(self, c, cfg_scale=1.0, temp=1.0, deterministic=True, train=False):
+    def forward(
+        self,
+        c,
+        cfg_scale=1.0,
+        temp=1.0,
+        deterministic=True,
+        train=False,
+        likelihood_components: torch.Tensor | None = None,
+        likelihood_weights: torch.Tensor | None = None,
+        likelihood_conditioning: str | None = None,
+        likelihood_topk: int | None = None,
+        likelihood_temperature: float = 1.0,
+        likelihood_loss_descriptors: torch.Tensor | None = None,
+        likelihood_loss_labels: torch.Tensor | None = None,
+        likelihood_resp_temperature: float = 1.0,
+    ):
         del train
         bsz = c.shape[0]
         device = c.device
@@ -610,17 +918,38 @@ class DitGen(nn.Module):
             size=(bsz, max(1, self.noise_coords)),
             device=device,
         )
-        cond = self.c_cfg_noise_to_cond(c, cfg_scale, noise_labels)
+        cond = self.c_cfg_noise_to_cond(
+            c,
+            cfg_scale,
+            noise_labels,
+            likelihood_components=likelihood_components,
+            likelihood_weights=likelihood_weights,
+            likelihood_conditioning=likelihood_conditioning,
+            likelihood_topk=likelihood_topk,
+            likelihood_temperature=likelihood_temperature,
+        )
         samples = self.generate_image(x, cond, deterministic=deterministic)
 
         noise_dict = {
             "x": x,
             "noise_labels": noise_labels,
+            "likelihood_components": likelihood_components,
+            "likelihood_weights": likelihood_weights,
         }
-        return {
+        out = {
             "samples": samples,
             "noise": noise_dict,
         }
+        if likelihood_loss_descriptors is not None:
+            loss_labels = c if likelihood_loss_labels is None else likelihood_loss_labels
+            nll, resp = self.likelihood_nll_and_responsibilities(
+                likelihood_loss_descriptors,
+                loss_labels,
+                temperature=likelihood_resp_temperature,
+            )
+            out["likelihood_nll"] = nll
+            out["likelihood_resp"] = resp
+        return out
 
 
 def build_generator_from_config(model_config: Dict[str, Any]) -> DitGen:

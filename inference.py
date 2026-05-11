@@ -27,13 +27,22 @@ def _is_latent(metadata: dict) -> bool:
     return model_cfg.get("in_channels", 3) == 4
 
 
+def _compile_kwargs_for_metadata(metadata: dict) -> dict:
+    model_cfg = dict(metadata.get("model_config", {}) or {})
+    if int(model_cfg.get("likelihood_component_count", 0) or 0) > 0:
+        return {"dynamic": False}
+    return {"dynamic": False, "fullgraph": True}
+
+
 def _load_model(init_from: str):
     model, params, metadata = load_generator_model_and_params(init_from, hf_cache_dir=HF_ROOT)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
+    if hasattr(model, "resize_likelihood_prior_from_state_dict"):
+        model.resize_likelihood_prior_from_state_dict(params)
     model.load_state_dict(params, strict=False)
     model.eval()
-    model = torch.compile(model, dynamic=False, fullgraph=True)
+    model = torch.compile(model, **_compile_kwargs_for_metadata(metadata))
 
     latent = _is_latent(metadata)
     postprocess_fn = get_postprocess_fn(use_aug=False, use_latent=False, use_cache=latent)
@@ -51,6 +60,106 @@ def generate_step(batch, params, apply_fn, postprocess_fn, cfg_scale=1.0):
     with torch.inference_mode():
         latent_samples = apply_fn(model, labels, cfg_scale)
         return postprocess_fn(latent_samples).cpu()
+
+
+def _unwrap_model(model):
+    if hasattr(model, "_orig_mod"):
+        return model._orig_mod
+    return model
+
+
+class LikelihoodSamplingTracker:
+    def __init__(self, component_count: int):
+        self.component_count = int(component_count)
+        self.weighted_counts = torch.zeros(self.component_count, dtype=torch.float64)
+        self.class_prior_entropy_sum = 0.0
+        self.selected_mass_sum = 0.0
+        self.samples = 0
+        self.component_slots = 0
+
+    @torch.no_grad()
+    def update(
+        self,
+        *,
+        logits: torch.Tensor,
+        components: torch.Tensor | None,
+        weights: torch.Tensor | None,
+    ) -> None:
+        if components is None or self.component_count <= 0:
+            return
+        probs = torch.softmax(logits.float(), dim=-1)
+        entropy = -(probs * probs.clamp_min(1e-8).log()).sum(dim=-1)
+        components = components.to(device=probs.device, dtype=torch.long)
+        if components.ndim == 1:
+            components = components[:, None]
+            component_weights = torch.ones(components.shape, device=probs.device, dtype=torch.float32)
+        elif weights is None:
+            component_weights = torch.full(
+                components.shape,
+                1.0 / max(1, int(components.shape[1])),
+                device=probs.device,
+                dtype=torch.float32,
+            )
+        else:
+            component_weights = weights.to(device=probs.device, dtype=torch.float32)
+        components = components.clamp(0, self.component_count - 1)
+        selected_mass = probs.gather(1, components).sum(dim=1)
+
+        counts = torch.zeros(self.component_count, device=probs.device, dtype=torch.float64)
+        counts.scatter_add_(0, components.reshape(-1), component_weights.double().reshape(-1))
+        self.weighted_counts += counts.cpu()
+        self.class_prior_entropy_sum += float(entropy.sum().detach().cpu().item())
+        self.selected_mass_sum += float(selected_mass.sum().detach().cpu().item())
+        self.samples += int(components.shape[0])
+        self.component_slots += int(components.numel())
+
+    def summary(self) -> dict[str, float]:
+        if self.samples <= 0 or self.weighted_counts.sum() <= 0:
+            return {}
+        usage = self.weighted_counts / self.weighted_counts.sum().clamp_min(1e-12)
+        usage_entropy = -(usage * usage.clamp_min(1e-12).log()).sum()
+        return {
+            "likelihood_component_usage_entropy": float(usage_entropy.item()),
+            "likelihood_component_usage_perplexity": float(torch.exp(usage_entropy).item()),
+            "likelihood_component_unique": float((self.weighted_counts > 0).sum().item()),
+            "likelihood_class_prior_entropy": self.class_prior_entropy_sum / float(self.samples),
+            "likelihood_selected_mass_mean": self.selected_mass_sum / float(self.samples),
+            "likelihood_samples_tracked": float(self.samples),
+            "likelihood_component_slots_tracked": float(self.component_slots),
+        }
+
+
+@torch.no_grad()
+def _sample_likelihood_condition(
+    model,
+    labels: torch.Tensor,
+    *,
+    conditioning: str,
+    topk: int,
+    temperature: float,
+    tracker: LikelihoodSamplingTracker | None = None,
+):
+    base = _unwrap_model(model)
+    if not hasattr(base, "sample_likelihood_components") or not base.has_likelihood_prior():
+        return None, None
+    components, weights = base.sample_likelihood_components(
+        labels,
+        conditioning=conditioning,
+        topk=topk,
+        temperature=temperature,
+    )
+    if tracker is not None and components is not None:
+        labels = labels.to(device=base.likelihood_class_logits.device, dtype=torch.long).clamp(0, base.num_classes - 1)
+        logits = base.likelihood_class_logits[labels] / max(float(temperature), 1e-6)
+        tracker.update(logits=logits, components=components, weights=weights)
+    return components, weights
+
+
+def _make_likelihood_tracker(model) -> LikelihoodSamplingTracker | None:
+    base = _unwrap_model(model)
+    if not hasattr(base, "has_likelihood_prior") or not base.has_likelihood_prior():
+        return None
+    return LikelihoodSamplingTracker(int(base.likelihood_component_count))
 
 
 def _infer_eval_step(init_from: str) -> int:
@@ -184,6 +293,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wandb-name", type=str, default=None)
     parser.add_argument("--wandb-run-id", type=str, default=None)
     parser.add_argument("--wandb-mode", type=str, default=None)
+    parser.add_argument(
+        "--likelihood-conditioning",
+        default="",
+        choices=("", "none", "hard", "top1", "sparse_soft", "soft"),
+        help="Override explicit-likelihood sampling mode for likelihood-prior checkpoints.",
+    )
+    parser.add_argument("--likelihood-topk", type=int, default=0, help="Top-k components for sparse likelihood sampling.")
+    parser.add_argument("--likelihood-temperature", type=float, default=1.0, help="Temperature for class-conditional prior sampling.")
     return parser
 
 
@@ -191,8 +308,33 @@ def run_inference_from_args(args: argparse.Namespace) -> dict:
     _ = args.hsdp_dim
     model, postprocess_fn, metadata, device = _load_model(args.init_from)
     _ = device
+    model_cfg = dict(metadata.get("model_config", {}) or {})
+    likelihood_conditioning = args.likelihood_conditioning or str(model_cfg.get("likelihood_conditioning", "none"))
+    likelihood_topk = int(args.likelihood_topk or model_cfg.get("likelihood_topk", 1))
+    likelihood_temperature = float(args.likelihood_temperature)
+    likelihood_tracker = _make_likelihood_tracker(model)
+
+    def apply_fn(m, y, cfg):
+        components, weights = _sample_likelihood_condition(
+            m,
+            y,
+            conditioning=likelihood_conditioning,
+            topk=likelihood_topk,
+            temperature=likelihood_temperature,
+            tracker=likelihood_tracker,
+        )
+        return m(
+            c=y,
+            cfg_scale=cfg,
+            likelihood_components=components,
+            likelihood_weights=weights,
+            likelihood_conditioning=likelihood_conditioning,
+            likelihood_topk=likelihood_topk,
+            likelihood_temperature=likelihood_temperature,
+        )["samples"]
+
     gen_step_jit = {
-        "apply_fn": lambda m, y, cfg: m(c=y, cfg_scale=cfg)["samples"],
+        "apply_fn": apply_fn,
         "postprocess_fn": postprocess_fn,
     }
     result = run_eval_fid(
@@ -211,6 +353,13 @@ def run_inference_from_args(args: argparse.Namespace) -> dict:
         wandb_run_id=args.wandb_run_id,
         wandb_mode=args.wandb_mode,
     )
+    result["likelihood_conditioning"] = likelihood_conditioning
+    result["likelihood_topk"] = likelihood_topk
+    result["likelihood_temperature"] = likelihood_temperature
+    result["num_samples"] = int(args.num_samples)
+    result["eval_batch_size"] = int(args.eval_batch_size)
+    if likelihood_tracker is not None:
+        result.update(likelihood_tracker.summary())
     return result
 
 
