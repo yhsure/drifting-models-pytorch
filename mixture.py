@@ -75,6 +75,7 @@ import copy
 import json
 import math
 import random
+import sys
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -202,6 +203,12 @@ def parse_args() -> Config:
         else:
             parser.add_argument(arg, type=value_type, default=field_value)
     cfg = Config(**vars(parser.parse_args()))
+    supplied_args = {arg.split("=", 1)[0] for arg in sys.argv[1:] if arg.startswith("--")}
+
+    def was_supplied(field_name: str) -> bool:
+        arg = "--" + field_name.replace("_", "-")
+        return arg in supplied_args or f"--no-{field_name.replace('_', '-')}" in supplied_args
+
     if cfg.pipeline not in {
         "latent_mixture",
         "cifar_unet",
@@ -259,37 +266,37 @@ def parse_args() -> Config:
         cfg.latent_dim = 32 if cfg.dataset == "fashion_mnist" else 2048
     defaults = Config()
     if cfg.dataset == "cifar10":
-        if cfg.vae_arch == defaults.vae_arch:
+        if cfg.vae_arch == defaults.vae_arch and not was_supplied("vae_arch"):
             cfg.vae_arch = "residual8"
-        if cfg.vae_epochs == defaults.vae_epochs:
+        if cfg.vae_epochs == defaults.vae_epochs and not was_supplied("vae_epochs"):
             cfg.vae_epochs = 30
-        if cfg.vae_lr == defaults.vae_lr:
+        if cfg.vae_lr == defaults.vae_lr and not was_supplied("vae_lr"):
             cfg.vae_lr = 2e-3
-        if cfg.vae_beta == defaults.vae_beta:
+        if cfg.vae_beta == defaults.vae_beta and not was_supplied("vae_beta"):
             cfg.vae_beta = 0.0
-        if cfg.vae_l1_weight == defaults.vae_l1_weight:
+        if cfg.vae_l1_weight == defaults.vae_l1_weight and not was_supplied("vae_l1_weight"):
             cfg.vae_l1_weight = 1.0
-        if cfg.vae_perceptual_weight == defaults.vae_perceptual_weight:
+        if cfg.vae_perceptual_weight == defaults.vae_perceptual_weight and not was_supplied("vae_perceptual_weight"):
             cfg.vae_perceptual_weight = 0.5
-        if cfg.vae_edge_weight == defaults.vae_edge_weight:
+        if cfg.vae_edge_weight == defaults.vae_edge_weight and not was_supplied("vae_edge_weight"):
             cfg.vae_edge_weight = 0.5
-        if cfg.feature_dim == defaults.feature_dim:
+        if cfg.feature_dim == defaults.feature_dim and not was_supplied("feature_dim"):
             cfg.feature_dim = 64
-        if cfg.feature_std_floor == defaults.feature_std_floor:
+        if cfg.feature_std_floor == defaults.feature_std_floor and not was_supplied("feature_std_floor"):
             cfg.feature_std_floor = 1.0
-        if cfg.mode_count == defaults.mode_count:
+        if cfg.mode_count == defaults.mode_count and not was_supplied("mode_count"):
             cfg.mode_count = 8192
-        if cfg.feature_sigma == defaults.feature_sigma:
+        if cfg.feature_sigma == defaults.feature_sigma and not was_supplied("feature_sigma"):
             cfg.feature_sigma = 5.0
-        if cfg.local_min_std == defaults.local_min_std:
+        if cfg.local_min_std == defaults.local_min_std and not was_supplied("local_min_std"):
             cfg.local_min_std = 0.0
-        if cfg.local_max_std == defaults.local_max_std:
+        if cfg.local_max_std == defaults.local_max_std and not was_supplied("local_max_std"):
             cfg.local_max_std = 0.0
-        if cfg.codebook_anchor_weight == defaults.codebook_anchor_weight:
+        if cfg.codebook_anchor_weight == defaults.codebook_anchor_weight and not was_supplied("codebook_anchor_weight"):
             cfg.codebook_anchor_weight = 1.0
-        if cfg.codebook_lr_scale == defaults.codebook_lr_scale:
+        if cfg.codebook_lr_scale == defaults.codebook_lr_scale and not was_supplied("codebook_lr_scale"):
             cfg.codebook_lr_scale = 0.0
-        if cfg.sample_temperature == defaults.sample_temperature:
+        if cfg.sample_temperature == defaults.sample_temperature and not was_supplied("sample_temperature"):
             cfg.sample_temperature = 0.7
         if cfg.pipeline == "cifar_likelihood_flow" and cfg.mode_count == 8192:
             cfg.mode_count = 128

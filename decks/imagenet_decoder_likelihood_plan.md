@@ -65,6 +65,23 @@ $$
 is only a diagnostic ablation. It is simpler, but likely worse because raw
 SDVAE latent distances need not match semantic neighborhoods.
 
-Run a 5k-step prototype and evaluate with the exact same ImageNet validation
-FID/IS protocol and CFG setting as the existing 5k drifting runs. The first
-target is the `23.37` FID 5k reference.
+Run a 5k-step prototype under the same practical conditions as the drifting
+baseline: same cached SDVAE latents, same frozen latent-MAE feature extractor,
+same ImageNet validation FID/IS protocol, same CFG setting, and comparable
+training compute. This matters more than matching every small modeling detail.
+
+The primary comparison should therefore be the plain latent-MAE drifting
+baseline:
+
+```text
+0501_0019_latent_ablation_30k_mae640_407971
+step 5000, cfg 2.5, FID 29.50
+```
+
+The pos-enhanced runs are useful aspirational references, but they should not
+be the first fairness bar:
+
+```text
+0501_0023_latent_ablation_30k_mae640_pos_enhanced_feat_407972: FID 24.59
+0501_0937_latent_ablation_5k_mae640_pos_enhanced_feat_408529: FID 23.37
+```
