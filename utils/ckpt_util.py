@@ -11,11 +11,20 @@ from utils.logging import log_for_0
 
 
 def _strip_compiled_prefix(state_dict: dict) -> dict:
-    """Remove the _orig_mod. prefix that torch.compile adds to parameter names."""
-    prefix = "_orig_mod."
-    if not any(k.startswith(prefix) for k in state_dict):
-        return state_dict
-    return {(k[len(prefix):] if k.startswith(prefix) else k): v for k, v in state_dict.items()}
+    """Remove wrapper prefixes added by DDP and torch.compile."""
+
+    def strip_key(key: str) -> str:
+        changed = True
+        while changed:
+            changed = False
+            for prefix in ("module.", "_orig_mod."):
+                if key.startswith(prefix):
+                    key = key[len(prefix) :]
+                    changed = True
+        return key
+
+    stripped = {strip_key(k): v for k, v in state_dict.items()}
+    return state_dict if all(k == strip_key(k) for k in state_dict) else stripped
 
 
 def _is_rank_zero() -> bool:

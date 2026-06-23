@@ -147,6 +147,9 @@ def run_init() -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True
     if torch.cuda.is_available():
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         torch.cuda.set_device(local_rank % torch.cuda.device_count())

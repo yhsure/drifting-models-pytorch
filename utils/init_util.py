@@ -12,6 +12,8 @@ from utils.env import HF_ROOT
 
 def resolve_artifact_dir(path: str) -> Path:
     base = Path(path).resolve()
+    if base.is_file():
+        return base
     params_ema_dir = base / "params_ema"
     ckpt_dir = base / "checkpoints"
     if params_ema_dir.is_dir():
@@ -20,8 +22,52 @@ def resolve_artifact_dir(path: str) -> Path:
         return ckpt_dir
     return base
 
+
+def _strip_state_dict_wrappers(params: Any) -> Any:
+    if not isinstance(params, dict):
+        return params
+    prefixes = ("module._orig_mod.", "_orig_mod.", "module.")
+    for prefix in prefixes:
+        if params and all(isinstance(k, str) and k.startswith(prefix) for k in params):
+            return {k.removeprefix(prefix): v for k, v in params.items()}
+    return params
+
+
+def _read_checkpoint_metadata(checkpoint_path: Path, restored: Any) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+    if isinstance(restored, dict) and isinstance(restored.get("metadata"), dict):
+        metadata.update(restored["metadata"])
+
+    run_dir = checkpoint_path.parent.parent if checkpoint_path.parent.name == "checkpoints" else checkpoint_path.parent
+    for candidate in (
+        run_dir / "params_ema" / "metadata.json",
+        run_dir / "metadata.json",
+        checkpoint_path.with_suffix(".metadata.json"),
+    ):
+        if candidate.is_file():
+            metadata.update(json.loads(candidate.read_text(encoding="utf-8")))
+            break
+
+    if isinstance(restored, dict) and "step" in restored:
+        metadata["step"] = int(restored["step"])
+    metadata.setdefault("format", "torch.checkpoint")
+    return metadata
+
+
+def _load_checkpoint_file(checkpoint_path: Path) -> Tuple[Any, Dict[str, Any]]:
+    restored = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    if isinstance(restored, dict):
+        params = restored.get("ema_model", restored.get("ema_params", restored.get("model", restored)))
+    else:
+        params = restored
+    return _strip_state_dict_wrappers(params), _read_checkpoint_metadata(checkpoint_path, restored)
+
+
 def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
     artifact_dir = resolve_artifact_dir(path)
+    if artifact_dir.is_file():
+        return _load_checkpoint_file(artifact_dir)
+
     metadata_path = artifact_dir / "metadata.json"
     params_path = artifact_dir / "ema_params.pt"
     legacy_meta_path = artifact_dir / "ema_model.metadata.json"
@@ -41,10 +87,7 @@ def _load_local_init_entry(path: str) -> Tuple[Any, Dict[str, Any]]:
 
     ckpts = sorted(artifact_dir.glob("step_*.pt"))
     if ckpts:
-        restored = torch.load(ckpts[-1], map_location="cpu", weights_only=False)
-        if isinstance(restored, dict) and "model" in restored:
-            params = restored.get("ema_model", restored.get("ema_params", restored["model"]))
-            return params, {}
+        return _load_checkpoint_file(ckpts[-1])
 
     raise ValueError(
         "Local init_from must be an artifact or checkpoint dir with params: "

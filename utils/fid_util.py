@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -68,6 +69,24 @@ def _compute_stats(
         "sigma": np.cov(feats64, rowvar=False),
         "features": feats,
     }
+
+
+def _load_ref_pr_features() -> np.ndarray:
+    ref_path = Path(_PR_REF_PATH)
+    cache_path = ref_path.with_name(f"{ref_path.stem}_inception_features_torch.npz")
+    if cache_path.exists():
+        data = np.load(cache_path)
+        return np.asarray(data["features"], dtype=np.float32)
+
+    data = np.load(ref_path)
+    ref_images = np.asarray(data["arr_0"], dtype=np.uint8)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    features = _compute_features(ref_images, device=device).astype(np.float32, copy=False)
+    tmp_path = cache_path.with_suffix(f"{cache_path.suffix}.tmp")
+    with tmp_path.open("wb") as f:
+        np.savez(f, features=features)
+    tmp_path.replace(cache_path)
+    return features
 
 
 def _compute_inception_score_from_images(samples_uint8: np.ndarray, device: torch.device):
@@ -138,8 +157,14 @@ def evaluate_fid(
 
     if eval_prc_recall:
         if _PR_REF_PATH and _PR_REF_PATH != "/path/to/imagenet_val_prc_arr0.npz":
-            metrics["precision"] = float("nan")
-            metrics["recall"] = float("nan")
+            from utils.jax_fid.precision_recall import compute_precision_recall
+
+            ref_features = _load_ref_pr_features()
+            pr_n = min(len(ref_features), len(stats["features"]), 10000)
+            precision, recall = compute_precision_recall(ref_features[:pr_n], stats["features"][:pr_n], k=3)
+            metrics["precision"] = float(precision)
+            metrics["recall"] = float(recall)
+            metrics["pr_num_samples"] = float(pr_n)
         else:
             log_for_0("PR reference path not configured; skipping precision/recall.")
 
