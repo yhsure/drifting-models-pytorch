@@ -1,0 +1,96 @@
+{
+  "checkpoint": "runs/0428_2340_gen_latent_ablation",
+  "cfg_scale": 1.1,
+  "mae_path": "hf://mae_latent_256",
+  "seed": 1234,
+  "num_ranking_anchors": 64,
+  "decoys_per_anchor": 63,
+  "euclidean": {
+    "top1": 0.71875,
+    "top3": 0.84375,
+    "bad_outranks_weak": 0.1875,
+    "decoy_outranks_weak": 0.25,
+    "median_corruption_margin": 0.10281820595264435,
+    "q25_corruption_margin": 0.014804924838244915,
+    "q75_corruption_margin": 0.238641157746315,
+    "median_decoy_margin": 0.12042994797229767,
+    "q25_decoy_margin": 0.003885926678776741,
+    "q75_decoy_margin": 0.2035745233297348
+  },
+  "ms_stat": {
+    "top1": 0.9375,
+    "top3": 0.96875,
+    "bad_outranks_weak": 0.0625,
+    "decoy_outranks_weak": 0.03125,
+    "median_corruption_margin": 0.19917559623718262,
+    "q25_corruption_margin": 0.12386054545640945,
+    "q75_corruption_margin": 0.29758673906326294,
+    "median_decoy_margin": 0.2079264223575592,
+    "q25_decoy_margin": 0.1114954873919487,
+    "q75_decoy_margin": 0.28514552116394043
+  },
+  "metric_stress": {
+    "fid": 3.91,
+    "num_anchors": 128,
+    "table": {
+      "roll": {
+        "euclidean": {
+          "accuracy": 0.90625,
+          "median_margin": 0.2116050124168396,
+          "q25_margin": 0.13335596024990082,
+          "q75_margin": 0.34625115990638733
+        },
+        "ms_stat": {
+          "accuracy": 1.0,
+          "median_margin": 0.2895529568195343,
+          "q25_margin": 0.22301332652568817,
+          "q75_margin": 0.39082086086273193
+        }
+      },
+      "patch": {
+        "euclidean": {
+          "accuracy": 0.984375,
+          "median_margin": 0.30468320846557617,
+          "q25_margin": 0.19875399768352509,
+          "q75_margin": 0.42266976833343506
+        },
+        "ms_stat": {
+          "accuracy": 1.0,
+          "median_margin": 0.351692259311676,
+          "q25_margin": 0.27201563119888306,
+          "q75_margin": 0.4438167214393616
+        }
+      },
+      "hard": {
+        "euclidean": {
+          "accuracy": 0.703125,
+          "median_margin": 0.07811636477708817,
+          "q25_margin": -0.027647173032164574,
+          "q75_margin": 0.22723110020160675
+        },
+        "ms_stat": {
+          "accuracy": 0.96875,
+          "median_margin": 0.17698386311531067,
+          "q25_margin": 0.09524114429950714,
+          "q75_margin": 0.2964746952056885
+        }
+      },
+      "average": {
+        "euclidean": {
+          "accuracy": 0.8645833333333334,
+          "median_margin": 0.1981348618865013
+        },
+        "ms_stat": {
+          "accuracy": 0.9895833333333334,
+          "median_margin": 0.272743026415507
+        }
+      }
+    },
+    "hard_accuracy_gain": 0.265625,
+    "visual_labels": [
+      31,
+      914,
+      68
+    ]
+  }
+}

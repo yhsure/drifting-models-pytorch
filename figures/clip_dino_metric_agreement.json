@@ -1,0 +1,41 @@
+{
+  "checkpoint": "runs/0428_2340_gen_latent_ablation",
+  "cfg_scale": 1.1,
+  "clip_model": "openai/clip-vit-base-patch32",
+  "dino_model": "facebook/dinov2-small",
+  "num_anchors": 128,
+  "candidate_order": [
+    "weak",
+    "roll",
+    "patch",
+    "euc_mined"
+  ],
+  "reference_top1_distribution": [
+    108,
+    3,
+    0,
+    17
+  ],
+  "results": {
+    "euclidean": {
+      "pairwise_agreement": 0.8841145833333334,
+      "pairwise_agreement_ci95": 0.023358416354207275,
+      "spearman": 0.8375000000000001,
+      "spearman_ci95": 0.040263477716104897,
+      "top1_match": 0.7578125,
+      "top1_match_ci95": 0.07450938097381023,
+      "weak_first": 0.671875,
+      "weak_first_ci95": 0.08166164272604692
+    },
+    "ms_stat": {
+      "pairwise_agreement": 0.9075520833333335,
+      "pairwise_agreement_ci95": 0.019107439243303007,
+      "spearman": 0.8812500000000001,
+      "spearman_ci95": 0.02730542294210518,
+      "top1_match": 0.859375,
+      "top1_match_ci95": 0.06046121027431261,
+      "weak_first": 0.9375,
+      "weak_first_ci95": 0.04209978304318757
+    }
+  }
+}

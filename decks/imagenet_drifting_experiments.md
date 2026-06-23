@@ -303,6 +303,28 @@ $$
 
 ---
 
+## What `levels` and `grid` Mean
+
+<div class="compact">
+
+`grid` controls the statistic-bin layout. With `grid=4`, descriptors are
+compared as 4x4 local summaries.
+
+`levels` controls how many pyramid scales contribute. For each level:
+
+1. blur the current map with a 3x3 average filter;
+2. compare the high-pass band, `current - blur`;
+3. also compare Sobel magnitude of the channel-mean band;
+4. downsample the blurred map by 2x for the next level.
+
+For `v1_e3`, level 0 starts at 4x4. Level 1 is coarser, weighted by
+`level_decay=0.5`, and its statistics are resized back to 4x4 bins before
+the L1 distance is computed.
+
+</div>
+
+---
+
 ## V2 and V3: Patch Matching
 
 <div class="compact">
@@ -349,6 +371,29 @@ Both are more correspondence-driven than V1; both were weaker in this 20k pilot.
 V1 improved both FID and IS at almost baseline wall-time.
 
 ![bg right:35% fit](../../../drifty-samples/assets/dynamics_comparison.png)
+
+---
+
+## External Visual Consensus Check
+
+Can V1 be justified by an outside visual metric, rather than only by FID?
+
+Reference distance:
+
+$$
+d_{\text{ref}}=\frac12 z(d_{\text{CLIP}})+\frac12 z(d_{\text{DINOv2}})
+$$
+
+over four controlled candidates per generated anchor:
+weak view, roll mix, patch shuffle, and Euclidean-mined layout impostor.
+
+<div class="note">
+Result is positive in this controlled layout-trap regime, so it should be
+presented as targeted evidence rather than a universal CLIP/DINO agreement
+claim.
+</div>
+
+![bg right:55% fit](../figures/clip_dino_metric_agreement.png)
 
 ---
 
