@@ -21,6 +21,7 @@ def drift_loss(
     weight_pos=None,
     weight_neg=None,
     R_list: Iterable[float] = (0.02, 0.05, 0.2),
+    weight_mode: str = "post",
 ):
     b, c_g, s = gen.shape
 
@@ -66,13 +67,24 @@ def drift_loss(
 
         force_across_r = torch.zeros_like(old_gen_scaled)
         split_idx = c_g + c_n
+        weight_mode = str(weight_mode).lower()
+        if weight_mode not in ("post", "measure", "mass"):
+            raise ValueError(f"Unknown drift_loss weight_mode={weight_mode!r}")
+        target_mass = torch.clamp(targets_w, min=1e-8)
 
         for r in R_list:
             logits = -dist_normed / float(r)
-            affinity = torch.softmax(logits, dim=-1)
+            if weight_mode in ("measure", "mass"):
+                row_logits = logits + torch.log(target_mass[:, None, :])
+                affinity = torch.softmax(row_logits, dim=-1)
+            else:
+                affinity = torch.softmax(logits, dim=-1)
             aff_transpose = torch.softmax(logits, dim=-2)
             affinity = torch.sqrt(torch.clamp(affinity * aff_transpose, min=1e-6))
-            affinity = affinity * targets_w[:, None, :]
+            if weight_mode in ("measure", "mass"):
+                affinity = affinity * torch.sqrt(target_mass[:, None, :])
+            else:
+                affinity = affinity * targets_w[:, None, :]
 
             aff_neg = affinity[:, :, :split_idx]
             aff_pos = affinity[:, :, split_idx:]
